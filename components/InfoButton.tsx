@@ -3,26 +3,12 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-/* Donation links — the site owner swaps these for their own handles.
-   They default to the platform landing pages so nothing points elsewhere. */
 const DONATE = [
   {
-    label: "Ko-fi",
-    href: process.env.NEXT_PUBLIC_KOFI_URL ?? "https://ko-fi.com/",
-    color: "#00e5ff",
-    icon: "M18 8h1a3 3 0 0 1 0 6h-1M4 8h14v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z",
-  },
-  {
     label: "GitHub Sponsors",
-    href: process.env.NEXT_PUBLIC_SPONSORS_URL ?? "https://github.com/sponsors",
+    href: "https://github.com/sponsors/4yci",
     color: "#00e676",
     icon: "M12 21s-7-4.35-9.5-8.5C1 9.5 2.5 6 6 6c2 0 3 1 6 4 3-3 4-4 6-4 3.5 0 5 3.5 3.5 6.5C19 16.65 12 21 12 21Z",
-  },
-  {
-    label: "PayPal",
-    href: process.env.NEXT_PUBLIC_PAYPAL_URL ?? "https://www.paypal.com/",
-    color: "#ffc400",
-    icon: "M6 20l1.5-9M9 4h6a3 3 0 0 1 0 6H8M7 11h6a3 3 0 0 1 0 6H6.5",
   },
 ] as const;
 
@@ -54,7 +40,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-charcoal-500/60 px-6 py-4">
           <div className="flex items-center gap-3">
-            <div cclassName="fixed right-3 top-2.5 z-30 flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue lg:right-6 lg:top-5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-teal/20 text-accent-blue">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2 21 9 12 22 3 9Z" fillOpacity={0.85} />
               </svg>
@@ -140,16 +126,16 @@ function Modal({ onClose }: { onClose: () => void }) {
             </div>
             <p className="mb-3 text-xs leading-relaxed text-charcoal-300">
               MCSR Stats is free and ad-free. If it&apos;s useful to you, a small
-              tip helps cover the API and hosting costs. ♥
+              tip helps cover the API and hosting costs.
             </p>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="flex flex-col gap-2">
               {DONATE.map((d) => (
                 <a
                   key={d.label}
                   href={d.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
+                  className="flex items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-semibold transition-all duration-300 hover:-translate-y-0.5"
                   style={{ color: d.color, borderColor: `${d.color}55`, backgroundColor: `${d.color}12` }}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -177,7 +163,7 @@ export default function InfoButton() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed right-6 top-5 z-50 flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue"
+        className="fixed right-3 top-2.5 z-30 flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue lg:right-6 lg:top-5"
         aria-label="About MCSR Stats"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
