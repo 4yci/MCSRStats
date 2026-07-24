@@ -52,6 +52,7 @@ function RunnerPicker({
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
+          onChange(e.target.value);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
