@@ -54,7 +54,7 @@ function Modal({ onClose }: { onClose: () => void }) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-charcoal-500/60 px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-teal/20 text-accent-blue">
+            <div cclassName="fixed right-3 top-2.5 z-30 flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue lg:right-6 lg:top-5">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2 21 9 12 22 3 9Z" fillOpacity={0.85} />
               </svg>
