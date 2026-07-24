@@ -28,6 +28,8 @@ export default async function RootLayout({
         <main className="grid-overlay ml-64 min-h-screen px-8 py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
+        {/* Added Analytics right here */}
+        <Analytics />
       </body>
     </html>
   );
