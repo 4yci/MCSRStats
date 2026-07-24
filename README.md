@@ -13,13 +13,6 @@ evaluation) in a single dark esports dashboard.
 - **Live data** from `api.mcsrranked.com`, fetched server-side with Next
   revalidation caching (60–600 s per endpoint) to respect API rate limits
 
-## Run it
-
-```bash
-npm install
-npm run dev   # → http://localhost:3000
-```
-
 ## Map
 
 | Route         | Module                                                        |
