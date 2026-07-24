@@ -1,0 +1,146 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+interface NavItem {
+  href: string;
+  label: string;
+  sub: string;
+  icon: JSX.Element;
+}
+
+const iconProps = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+const NAV: NavItem[] = [
+  {
+    href: "/",
+    label: "Leaderboards",
+    sub: "Global rankings",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M8 21h8M12 17v4M7 4h10v6a5 5 0 0 1-10 0V4Z" />
+        <path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3" />
+      </svg>
+    ),
+  },
+  {
+    href: "/analytics",
+    label: "Player Analytics",
+    sub: "Splits & pacing",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+      </svg>
+    ),
+  },
+  {
+    href: "/compare",
+    label: "Head-to-Head",
+    sub: "Compare two runners",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M12 3v18M5 8l-3 4 3 4M19 8l3 4-3 4M8 12H2M22 12h-6" />
+      </svg>
+    ),
+  },
+  {
+    href: "/zero-cycle",
+    label: "Zero-Cycle Reference",
+    sub: "Tower coordinates",
+    icon: (
+      <svg {...iconProps}>
+        <path d="M13 2 3 14h8l-1 8 10-12h-8l1-8Z" />
+      </svg>
+    ),
+  },
+];
+
+export default function Sidebar({ season }: { season: number | null }) {
+  const pathname = usePathname();
+  return (
+    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-charcoal-500/60 bg-charcoal-900/95 backdrop-blur">
+      {/* Logo */}
+      <Link
+        href="/"
+        className="group flex items-center gap-3 border-b border-charcoal-500/60 px-5 py-5"
+      >
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-teal/20 text-accent-blue shadow-glow-blue transition-all duration-300 group-hover:bg-accent-teal/30">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2 21 9 12 22 3 9Z" fillOpacity={0.85} />
+          </svg>
+        </div>
+        <div>
+          <div className="font-mono text-sm font-bold tracking-[0.2em] text-white">
+            MCSR<span className="text-accent-blue">·</span>STATS
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-charcoal-300">
+            Ranked Intelligence
+          </div>
+        </div>
+      </Link>
+
+      {/* Nav */}
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {NAV.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-300 ${
+                active
+                  ? "bg-accent-teal/15 text-white"
+                  : "text-charcoal-300 hover:bg-charcoal-600/60 hover:text-white"
+              }`}
+            >
+              {active && (
+                <span className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-accent-blue shadow-glow-blue" />
+              )}
+              <span
+                className={`transition-colors duration-300 ${
+                  active ? "text-accent-blue" : "group-hover:text-accent-blue"
+                }`}
+              >
+                {item.icon}
+              </span>
+              <span>
+                <span className="block text-sm font-semibold leading-tight">
+                  {item.label}
+                </span>
+                <span className="block text-[11px] text-charcoal-300">
+                  {item.sub}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Season footer */}
+      <div className="border-t border-charcoal-500/60 px-5 py-4">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-charcoal-300">
+            {season !== null ? `Season ${season}` : "MCSR Ranked"}
+          </span>
+          <span className="chip border border-accent-green/40 bg-accent-green/10 text-accent-green">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-green" />
+            Live
+          </span>
+        </div>
+        <div className="mt-2 text-[11px] text-charcoal-300">
+          api.mcsrranked.com
+        </div>
+      </div>
+    </aside>
+  );
+}
