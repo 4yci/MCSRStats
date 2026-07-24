@@ -25,7 +25,7 @@ export default async function RootLayout({
       <body className="min-h-screen antialiased">
         <Sidebar season={season} />
         <InfoButton />
-        <main className="grid-overlay ml-64 min-h-screen px-8 py-8">
+        <main className="grid-overlay min-h-screen px-4 pb-10 pt-20 lg:ml-64 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
         {/* Added Analytics right here */}
