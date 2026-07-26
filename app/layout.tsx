@@ -11,8 +11,14 @@ export const metadata: Metadata = {
   ),
   title: "MCSR Stats — Ranked Intelligence",
   description:
-    "The all-in-one MCSR Ranked platform: live leaderboards, deep player analytics, and a complete zero-cycle coordinate reference.",
+    "The all-in-one MCSR Ranked platform: live leaderboards, deep player analytics, and head-to-head comparisons.",
 };
+
+/**
+ * Applies the saved theme before first paint so the page never flashes the
+ * wrong palette. Falls back to the OS preference, then dark.
+ */
+const themeBootstrap = `(function(){try{var t=localStorage.getItem("mcsr:theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
 
 export default async function RootLayout({
   children,
@@ -21,7 +27,10 @@ export default async function RootLayout({
 }) {
   const season = await fetchSeasonNumber();
   return (
-    <html lang="en">
+    <html lang="en" data-theme="dark" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-screen antialiased">
         <Sidebar season={season} />
         <InfoButton />

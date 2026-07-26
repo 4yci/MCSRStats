@@ -8,26 +8,32 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Every palette entry resolves through a CSS variable, so switching
+      // `data-theme` on <html> re-colors the whole app without touching a
+      // single component class name. The `<alpha-value>` form keeps Tailwind's
+      // opacity modifiers (bg-charcoal-900/50 etc.) working.
       colors: {
         charcoal: {
-          950: "#08080a",
-          900: "#0c0c0f",
-          850: "#101014",
-          800: "#121212",
-          700: "#17171c",
-          600: "#1d1d24",
-          500: "#26262f",
-          400: "#33333e",
-          300: "#4a4a58",
+          950: "rgb(var(--c-950) / <alpha-value>)",
+          900: "rgb(var(--c-900) / <alpha-value>)",
+          850: "rgb(var(--c-850) / <alpha-value>)",
+          800: "rgb(var(--c-800) / <alpha-value>)",
+          700: "rgb(var(--c-700) / <alpha-value>)",
+          600: "rgb(var(--c-600) / <alpha-value>)",
+          500: "rgb(var(--c-500) / <alpha-value>)",
+          400: "rgb(var(--c-400) / <alpha-value>)",
+          300: "rgb(var(--c-300) / <alpha-value>)",
         },
         accent: {
-          blue: "#00e5ff",   // Diamond Blue — top ranks
-          green: "#00e676",  // Emerald Green — PBs / wins
-          teal: "#008080",   // End Teal
-          amber: "#ffc400",
-          red: "#ff5252",
-          purple: "#b388ff",
+          blue: "rgb(var(--a-blue) / <alpha-value>)",   // Diamond Blue
+          green: "rgb(var(--a-green) / <alpha-value>)", // Emerald Green
+          teal: "rgb(var(--a-teal) / <alpha-value>)",   // End Teal
+          amber: "rgb(var(--a-amber) / <alpha-value>)",
+          red: "rgb(var(--a-red) / <alpha-value>)",
+          purple: "rgb(var(--a-purple) / <alpha-value>)",
         },
+        // Remapped so `text-white` means "primary foreground" in both themes.
+        white: "rgb(var(--fg) / <alpha-value>)",
       },
       fontFamily: {
         mono: [

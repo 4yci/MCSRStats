@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import ThemeToggle from "./ThemeToggle";
 
 const DONATE = [
   {
@@ -109,6 +110,12 @@ function Modal({ onClose }: { onClose: () => void }) {
               </li>
               <li className="flex gap-2">
                 <span className="text-accent-blue">▸</span>
+                Rank icons use Minecraft item textures — Minecraft and all its
+                assets are the property of Mojang Studios / Microsoft, used here
+                for identification in a non-commercial fan project.
+              </li>
+              <li className="flex gap-2">
+                <span className="text-accent-blue">▸</span>
                 Built with Next.js &amp; TypeScript — charts and the 3D skin are
                 hand-built, no heavy libraries.
               </li>
@@ -161,17 +168,20 @@ export default function InfoButton() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed right-3 top-2.5 z-30 flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue lg:right-6 lg:top-5"
-        aria-label="About MCSR Stats"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 16v-4M12 8h.01" />
-        </svg>
-        Info
-      </button>
+      <div className="fixed right-3 top-2.5 z-30 flex items-center gap-2 lg:right-6 lg:top-5">
+        <ThemeToggle />
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 rounded-lg border border-charcoal-500/60 bg-charcoal-800/80 px-3.5 py-2 text-sm font-semibold text-charcoal-300 backdrop-blur transition-all duration-300 hover:border-accent-blue/50 hover:text-accent-blue hover:shadow-glow-blue"
+          aria-label="About MCSR Stats"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 16v-4M12 8h.01" />
+          </svg>
+          Info
+        </button>
+      </div>
       {open && <Modal onClose={() => setOpen(false)} />}
     </>
   );

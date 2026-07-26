@@ -2,24 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* ── Theme tokens ──────────────────────────────────────────────────
+   Values are space-separated RGB channels so Tailwind can apply its
+   opacity modifiers (e.g. bg-charcoal-900/50). Flipping the
+   `data-theme` attribute on <html> re-colors the entire app.        */
+
+:root,
+:root[data-theme="dark"] {
   color-scheme: dark;
+
+  --c-950: 8 8 10;
+  --c-900: 12 12 15;
+  --c-850: 16 16 20;
+  --c-800: 18 18 18;
+  --c-700: 23 23 28;
+  --c-600: 29 29 36;
+  --c-500: 38 38 47;
+  --c-400: 51 51 62;
+  --c-300: 122 122 140;
+
+  --fg: 255 255 255;
+  --body-fg: 231 231 238;
+
+  --a-blue: 0 229 255;
+  --a-green: 0 230 118;
+  --a-teal: 0 128 128;
+  --a-amber: 255 196 0;
+  --a-red: 255 82 82;
+  --a-purple: 179 136 255;
+
+  --glow-1: rgba(0, 128, 128, 0.12);
+  --glow-2: rgba(0, 229, 255, 0.06);
+  --grid-line: rgba(255, 255, 255, 0.025);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* The scale keeps its meaning — 900 is the page, 850 panels, 500 borders,
+     300 muted text — it just runs light instead of dark. */
+  --c-950: 255 255 255;
+  --c-900: 244 246 249;
+  --c-850: 255 255 255;
+  --c-800: 240 242 246;
+  --c-700: 233 236 241;
+  --c-600: 223 227 234;
+  --c-500: 202 208 218;
+  --c-400: 168 176 189;
+  --c-300: 90 98 112;
+
+  --fg: 14 17 22;
+  --body-fg: 30 35 43;
+
+  /* Darkened accents so they stay legible on light surfaces. */
+  --a-blue: 0 124 158;
+  --a-green: 8 138 66;
+  --a-teal: 13 105 105;
+  --a-amber: 166 118 0;
+  --a-red: 205 51 54;
+  --a-purple: 103 66 190;
+
+  --glow-1: rgba(0, 128, 128, 0.1);
+  --glow-2: rgba(0, 150, 190, 0.07);
+  --grid-line: rgba(15, 23, 42, 0.04);
 }
 
 body {
-  background-color: #0c0c0f;
+  background-color: rgb(var(--c-900));
   background-image:
-    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(0, 128, 128, 0.12), transparent),
-    radial-gradient(ellipse 60% 40% at 90% 110%, rgba(0, 229, 255, 0.06), transparent);
+    radial-gradient(ellipse 80% 50% at 20% -10%, var(--glow-1), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 110%, var(--glow-2), transparent);
   background-attachment: fixed;
-  color: #e7e7ee;
+  color: rgb(var(--body-fg));
 }
 
 /* Subtle grid overlay for the esports-terminal feel */
 .grid-overlay {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 36px 36px;
 }
 
@@ -28,15 +89,15 @@ body {
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: #101014;
+  background: rgb(var(--c-850));
 }
 ::-webkit-scrollbar-thumb {
-  background: #33333e;
+  background: rgb(var(--c-400));
   border-radius: 6px;
-  border: 2px solid #101014;
+  border: 2px solid rgb(var(--c-850));
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #008080;
+  background: rgb(var(--a-teal));
 }
 
 @layer components {

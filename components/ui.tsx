@@ -54,42 +54,45 @@ export function StatCard({
   );
 }
 
-/**
- * Per-rank icon shaped after the Minecraft item each division is named for —
- * a coal lump, ingots (iron/gold/netherite), and cut gems (emerald/diamond).
- * Original SVG art tinted with the app's tier colors.
- */
+/* ── Rank icons ────────────────────────────────────────────────────
+   The real MCSR Ranked rank badges live in /public/ranks/<rank>.png.
+   A tinted diamond is drawn underneath as a cheap fallback, so a missing
+   or failed image degrades gracefully instead of showing a broken icon. */
+
+/** Filename each rank looks for under /public/ranks/ (lowercase tier name). */
+const TIER_TEXTURE: Record<Tier, string> = {
+  Coal: "coal",
+  Iron: "iron",
+  Gold: "gold",
+  Emerald: "emerald",
+  Diamond: "diamond",
+  Netherite: "netherite",
+};
+
 export function TierBadge({ tier, size = 18 }: { tier: Tier; size?: number }) {
   const c = TIER_COLORS[tier];
-  const edge = "#0b0b0e";
   return (
-    <span className="inline-flex items-center" title={`${tier} rank`}>
-      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
-        {tier === "Coal" && (
-          <g stroke={edge} strokeWidth={0.9} strokeLinejoin="round">
-            <path d="M7 6h7a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V8a2 2 0 0 1 2-2z" fill={c} />
-            <path d="M9 9l2 2-2 2M14 10l-1.5 2 1.5 2" fill="none" stroke={edge} strokeOpacity={0.5} strokeWidth={0.9} />
-          </g>
-        )}
-        {(tier === "Iron" || tier === "Gold" || tier === "Netherite") && (
-          <g stroke={edge} strokeWidth={0.8} strokeLinejoin="round">
-            <path d="M4 11h16l-2 6H6z" fill={c} />
-            <path d="M4 11l2-3h12l2 3z" fill={c} fillOpacity={0.6} />
-          </g>
-        )}
-        {tier === "Emerald" && (
-          <g stroke={edge} strokeWidth={0.8} strokeLinejoin="round">
-            <path d="M12 2l7 5v10l-7 5-7-5V7z" fill={c} />
-            <path d="M12 2l7 5-7 4-7-4z" fill={c} fillOpacity={0.55} />
-          </g>
-        )}
-        {tier === "Diamond" && (
-          <g stroke={edge} strokeWidth={0.8} strokeLinejoin="round">
-            <path d="M5 9l3-4h8l3 4-7 11z" fill={c} />
-            <path d="M5 9l3-4h8l3 4-7 3z" fill={c} fillOpacity={0.55} />
-          </g>
-        )}
+    <span
+      className="relative inline-block shrink-0 align-middle"
+      style={{ width: size, height: size }}
+      title={`${tier} rank`}
+    >
+      {/* Fallback: simple tinted diamond, hidden behind the texture. */}
+      <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
+        <path d="M8 1.5 14.5 8 8 14.5 1.5 8Z" fill={c} fillOpacity={0.55} stroke={c} strokeWidth={1.2} strokeLinejoin="round" />
       </svg>
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url(/ranks/${TIER_TEXTURE[tier]}.png)`,
+          backgroundSize: "contain",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          // Smooth on purpose: the badge art is high-res and scaled DOWN.
+        }}
+      />
     </span>
   );
 }
