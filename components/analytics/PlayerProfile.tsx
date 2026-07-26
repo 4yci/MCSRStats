@@ -1081,7 +1081,7 @@ function Profile({
   const router = useRouter();
   const s = profile.season;
   const [avgMode, setAvgMode] = useState<AvgMode>("threeQuarter");
-  const [avgN, setAvgN] = useState(20);
+  const [avgN, setAvgN] = useState(100);
   const [openMatch, setOpenMatch] = useState<number | null>(null);
   const [excludeDeaths, setExcludeDeaths] = useState(false);
   const [splitAvgMode, setSplitAvgMode] = useState<SplitAvgMode>("all");
@@ -1101,7 +1101,7 @@ function Profile({
     p.set("player", profile.name);
     if (profile.requestedSeason) p.set("season", String(profile.requestedSeason));
     if (profile.includesPrivate) p.set("private", "1");
-    if (profile.sampleSize !== 20) p.set("samples", String(profile.sampleSize));
+    if (profile.sampleSize !== 100) p.set("samples", String(profile.sampleSize));
     for (const [k, v] of Object.entries(patch)) {
       if (v === null) p.delete(k);
       else p.set(k, v);

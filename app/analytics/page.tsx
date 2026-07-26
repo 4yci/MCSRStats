@@ -56,7 +56,7 @@ export default async function AnalyticsPage({
       : undefined;
   const includePrivate = searchParams.private === "1";
   const askedSamples = Number(searchParams.samples);
-  const sampleSize = Number.isFinite(askedSamples) ? askedSamples : undefined;
+  const sampleSize = Number.isFinite(askedSamples) ? askedSamples : 100;
 
   if (!searchParams.player) {
     return (
