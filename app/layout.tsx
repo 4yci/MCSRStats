@@ -16,9 +16,12 @@ export const metadata: Metadata = {
 
 /**
  * Applies the saved theme before first paint so the page never flashes the
- * wrong palette. Falls back to the OS preference, then dark.
+ * wrong palette.
+ *
+ * `data-theme-pref` holds the user's CHOICE (dark | light | system) and
+ * `data-theme` the RESOLVED palette. First-time visitors get dark.
  */
-const themeBootstrap = `(function(){try{var t=localStorage.getItem("mcsr:theme");if(t!=="light"&&t!=="dark"){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`;
+const themeBootstrap = `(function(){var p,r;try{p=localStorage.getItem("mcsr:theme");}catch(e){}if(p!=="light"&&p!=="dark"&&p!=="system")p="dark";try{r=p==="system"?(window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"):p;}catch(e){r="dark";}var d=document.documentElement;d.setAttribute("data-theme",r);d.setAttribute("data-theme-pref",p);})();`;
 
 export default async function RootLayout({
   children,
