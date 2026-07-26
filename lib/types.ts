@@ -41,10 +41,12 @@ export interface SplitMeta {
 /** Aggregated stats for one phase of a runner's game. */
 export interface SplitData {
   key: SplitKey;
-  /** Mean segment duration across sampled completions (ms). */
+  /** Mean segment duration across the best 3/4 of sampled completions (ms). */
   avgMs: number;
   /** Fastest sampled segment (ms). */
   bestMs: number;
+  /** Match id the fastest segment came from (for click-through). */
+  bestMatchId: number | null;
 }
 
 /* ── Practice-tool session tracking (Modules C, D, E) ─────────────── */

@@ -96,21 +96,79 @@ function PhaseBar({ detail, uuid }: { detail: MatchDetailData; uuid: string }) {
   const rows = buildRows(detail, uuid, 0);
   const end =
     detail.result.time ?? (rows.length ? rows[rows.length - 1].time : 1);
+
+  // Build segments carrying their own start/duration so the tooltip can show
+  // when the phase began and how long it took.
+  const segs: {
+    label: string;
+    color: string | null;
+    startMs: number;
+    endMs: number;
+    durMs: number;
+    pct: number;
+  }[] = [];
   let prev = 0;
+  for (const r of rows) {
+    const dur = Math.max(0, r.time - prev);
+    segs.push({
+      label: r.label,
+      color: r.color,
+      startMs: prev,
+      endMs: r.time,
+      durMs: dur,
+      pct: end > 0 ? (dur / end) * 100 : 0,
+    });
+    prev = r.time;
+  }
+
+  const [active, setActive] = useState<number | null>(null);
+  const cur = active !== null ? segs[active] : null;
+
   return (
-    <div className="flex h-3 w-full overflow-hidden rounded-full bg-charcoal-700">
-      {rows.map((r, i) => {
-        const w = Math.max(0, ((r.time - prev) / end) * 100);
-        prev = r.time;
-        return (
-          <div
+    <div className="w-full">
+      <div
+        className="flex h-4 w-full overflow-hidden rounded-full bg-charcoal-700 ring-1 ring-charcoal-500/50"
+        onMouseLeave={() => setActive(null)}
+      >
+        {segs.map((s, i) => (
+          <button
             key={i}
-            title={`${r.label} — ${formatTime(r.time, false)}`}
-            style={{ width: `${w}%`, backgroundColor: r.color ?? "#33333e" }}
-            className="h-full"
+            type="button"
+            onMouseEnter={() => setActive(i)}
+            onClick={() => setActive(active === i ? null : i)}
+            aria-label={`${s.label}: ${formatTime(s.durMs, false)}`}
+            className="h-full cursor-pointer transition-opacity duration-150"
+            style={{
+              width: `${s.pct}%`,
+              backgroundColor: s.color ?? "#33333e",
+              // Dim the others instead of scaling, so nothing spills outside
+              // the rounded bar and gets clipped.
+              opacity: active === null || active === i ? 1 : 0.35,
+              boxShadow:
+                active === i ? "inset 0 0 0 2px rgba(255,255,255,0.85)" : undefined,
+            }}
           />
-        );
-      })}
+        ))}
+      </div>
+
+      {/* Read-out sits BELOW the bar (inline, never clipped by the modal). */}
+      <div className="mt-1 h-4 truncate font-mono text-[11px] leading-4">
+        {cur ? (
+          <>
+            <span className="font-bold capitalize" style={{ color: cur.color ?? "#c8c8d4" }}>
+              {cur.label}
+            </span>
+            <span className="text-charcoal-300"> · split </span>
+            <span className="text-accent-green">{formatTime(cur.durMs, false)}</span>
+            <span className="text-charcoal-300"> · started </span>
+            <span className="text-accent-blue">{formatTime(cur.startMs, false)}</span>
+          </>
+        ) : (
+          <span className="text-charcoal-300/70">
+            hover or tap a segment for its split
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -138,7 +196,7 @@ export default function MatchDetail({
 }) {
   const [detail, setDetail] = useState<MatchDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [level, setLevel] = useState(1); // Med
+  const [level, setLevel] = useState(0); // Low
 
   useEffect(() => {
     let alive = true;
@@ -232,8 +290,8 @@ export default function MatchDetail({
               <div className="space-y-2 border-b border-charcoal-500/60 px-5 py-4">
                 {players.map((p) => (
                   <div key={p.uuid} className="flex items-center gap-3">
-                    <span className="w-7 shrink-0 rounded bg-charcoal-600 py-0.5 text-center font-mono text-[10px] font-bold text-white">
-                      {p.nickname.slice(0, 2).toUpperCase()}
+                    <span className="hidden w-28 shrink-0 truncate text-right text-xs font-semibold text-charcoal-300 sm:block">
+                      {p.nickname}
                     </span>
                     <PhaseBar detail={detail} uuid={p.uuid} />
                   </div>

@@ -1,8 +1,8 @@
 # MCSR Stats
 
 An all-in-one dashboard for competitive Minecraft speedrunning. It brings the live
-ranked ladder, deep per-player analytics, head-to-head comparisons, and a complete
-zero-cycle coordinate reference together in a single dark, esports-styled interface.
+ranked ladder, deep per-player analytics, and head-to-head comparisons together in
+a single dark, esports-styled interface.
 
 **Live site: https://mcsrstatistiques.vercel.app**
 
@@ -34,8 +34,8 @@ A complete, live profile for any ranked player:
 - **A rotating 3D render of the player's Minecraft skin** you can drag to spin.
 - **Personal Best, win/loss record, win rate, best streak, peak Elo,** and playtime.
 - **Average of Best** — a consistency metric that averages a runner's fastest
-  completions. You can measure it over their best half, a specific number of runs,
-  or all of them.
+  completions. You can measure it over their best three quarters, a specific number
+  of runs, or all of them.
 - **Pace Rank** — the rank a runner's *speed* actually deserves, worked out from
   how their pace compares to each rank's average. Someone stuck in Gold by rating
   but posting Diamond-level times is shown as exactly that.
@@ -48,10 +48,14 @@ A complete, live profile for any ranked player:
 - **Split comparison across all ranks** — your times laid side by side with the
   average for every rank (Coal through Netherite), so you can see at a glance where
   you're ahead and where you're behind.
-- **Seed and bastion breakdown** — win rate and pace grouped by seed type, plus the
-  specific split each seed type affects, so you can find which seeds you're
-  strongest and weakest on.
+- **Seed and bastion breakdown** — win rate, death rate, and pace grouped by seed
+  type, plus the specific split each seed type affects, so you can find which seeds
+  you're strongest and weakest on.
+- **Death breakdown** — how often runs end up with a death, with the option to
+  recompute your pace using only clean runs.
 - **Recent matches** you can expand and click into for a full timeline of the game.
+- **Options** to view any past season, fold in private-room games, and choose how
+  many recent matches the split and death stats are sampled from.
 
 ### Head-to-Head
 
@@ -61,14 +65,6 @@ Pick any two runners and compare them directly:
 - Both runners' **Elo histories overlaid** on one chart.
 - Their **average splits side by side**, with the time difference in every phase.
 - A list of their **direct matchups**, each openable as a full match timeline.
-
-### Zero-Cycle Reference
-
-An interactive version of the community's zero-cycle coordinate sheet — the exact
-positions used to kill the Ender Dragon in a single cycle. Pick any of the End's
-towers and read the precise standing and bed coordinates for each height and
-approach, along with the master dragon-pass nodes, offset setups, and a small
-diagram of the line-up.
 
 ---
 

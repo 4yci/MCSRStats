@@ -16,7 +16,7 @@ const FEATURES = [
   ["Live Leaderboards", "Season Elo, best times, and the weekly race."],
   ["Player Analytics", "PB, Pace Rank, splits, Elo history, seed breakdowns."],
   ["Head-to-Head", "Direct record, overlaid Elo, and split deltas."],
-  ["Zero-Cycle Reference", "Real coordinates for every End tower."],
+  ["Multi-Season", "Browse any past season's stats and ladder."],
 ] as const;
 
 function Modal({ onClose }: { onClose: () => void }) {

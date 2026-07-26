@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import PlayerAnalytics from "@/components/analytics/PlayerProfile";
-import { fetchProfile, fetchRoster } from "@/lib/api";
+import { fetchProfile, fetchRoster, fetchSeasonNumber } from "@/lib/api";
 
 export async function generateMetadata({
   searchParams,
@@ -35,16 +35,59 @@ export async function generateMetadata({
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: { player?: string; menu?: string };
+  searchParams: {
+    player?: string;
+    menu?: string;
+    season?: string;
+    private?: string;
+    samples?: string;
+  };
 }) {
-  const roster = await fetchRoster();
+  const [roster, currentSeason] = await Promise.all([
+    fetchRoster(),
+    fetchSeasonNumber(),
+  ]);
   const forceMenu = searchParams.menu === "1";
+
+  const askedSeason = Number(searchParams.season);
+  const season =
+    Number.isFinite(askedSeason) && askedSeason > 0 && askedSeason !== currentSeason
+      ? askedSeason
+      : undefined;
+  const includePrivate = searchParams.private === "1";
+  const askedSamples = Number(searchParams.samples);
+  const sampleSize = Number.isFinite(askedSamples) ? askedSamples : undefined;
+
   if (!searchParams.player) {
-    return <PlayerAnalytics roster={roster} forceMenu={forceMenu} />;
+    return (
+      <PlayerAnalytics
+        roster={roster}
+        forceMenu={forceMenu}
+        currentSeason={currentSeason}
+      />
+    );
   }
-  const res = await fetchProfile(searchParams.player);
+
+  const res = await fetchProfile(searchParams.player, {
+    season,
+    includePrivate,
+    sampleSize,
+  });
   if (!res.ok) {
-    return <PlayerAnalytics roster={roster} error={res.error} forceMenu />;
+    return (
+      <PlayerAnalytics
+        roster={roster}
+        error={res.error}
+        forceMenu
+        currentSeason={currentSeason}
+      />
+    );
   }
-  return <PlayerAnalytics roster={roster} profile={res.data} />;
+  return (
+    <PlayerAnalytics
+      roster={roster}
+      profile={res.data}
+      currentSeason={currentSeason}
+    />
+  );
 }

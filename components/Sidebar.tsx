@@ -54,16 +54,6 @@ const NAV: NavItem[] = [
       </svg>
     ),
   },
-  {
-    href: "/zero-cycle",
-    label: "Zero-Cycle Reference",
-    sub: "Tower coordinates",
-    icon: (
-      <svg {...iconProps}>
-        <path d="M13 2 3 14h8l-1 8 10-12h-8l1-8Z" />
-      </svg>
-    ),
-  },
 ];
 
 function LogoMark() {
@@ -189,14 +179,8 @@ export default function Sidebar({ season }: { season: number | null }) {
 
         {/* Season footer */}
         <div className="border-t border-charcoal-500/60 px-5 py-4">
-          <div className="flex items-center justify-between">
-            <span className="font-mono text-[11px] uppercase tracking-widest text-charcoal-300">
-              {season !== null ? `Season ${season}` : "MCSR Ranked"}
-            </span>
-            <span className="chip border border-accent-green/40 bg-accent-green/10 text-accent-green">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-green" />
-              Live
-            </span>
+          <div className="font-mono text-[11px] uppercase tracking-widest text-charcoal-300">
+            {season !== null ? `Season ${season}` : "MCSR Ranked"}
           </div>
           <div className="mt-2 text-[11px] text-charcoal-300">
             api.mcsrranked.com

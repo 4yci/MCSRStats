@@ -1,5 +1,5 @@
-import { Analytics } from '@vercel/analytics/react';
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import InfoButton from "@/components/InfoButton";
@@ -28,7 +28,6 @@ export default async function RootLayout({
         <main className="grid-overlay min-h-screen px-4 pb-10 pt-20 lg:ml-64 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
-        {/* Added Analytics right here */}
         <Analytics />
       </body>
     </html>

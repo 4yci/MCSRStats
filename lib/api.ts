@@ -130,20 +130,55 @@ export interface WeeklyEntry {
 }
 
 export interface BoardsData {
-  season: number | null;
+  /** Season shown on the Elo board (null = current). */
+  eloSeason: number | null;
+  /** Season shown on Best Times — a number, or "all" for all-time. */
+  timesSeason: number | "all" | null;
   elo: EloEntry[];
   times: TimeEntry[];
   weekly: WeeklyEntry[];
+  /** Which weekly race is displayed, and the newest available week. */
+  weekId: number | null;
+  latestWeekId: number | null;
   weeklyEndsAt: number | null;
   error: string | null;
 }
 
-export async function fetchBoards(): Promise<BoardsData> {
+const seasonQ = (season?: number) =>
+  season ? `?season=${season}` : "";
+
+interface RawWeekly {
+  id?: number;
+  endsAt: number | null;
+  leaderboard: { rank: number; time: number; player: RawUserLite }[];
+}
+
+/**
+ * Each board is scoped independently:
+ *  - Elo board  → a season
+ *  - Best Times → a season, or all-time
+ *  - Weekly     → a specific week id (weeks are not seasons)
+ */
+export async function fetchBoards(opts: {
+  eloSeason?: number;
+  timesSeason?: number | "all";
+  weekId?: number;
+} = {}): Promise<BoardsData> {
+  const { eloSeason, timesSeason, weekId } = opts;
+  const eloQ = seasonQ(eloSeason);
+  // "all" means omit the season param entirely (record-leaderboard defaults to all-time).
+  const timesQ =
+    timesSeason === "all" || timesSeason === undefined
+      ? ""
+      : `?season=${timesSeason}`;
+
   const [eloRes, timesRes, weeklyRes] = await Promise.allSettled([
     api<{
       season: { number: number };
-      users: (RawUserLite & { seasonResult?: { phasePoint?: number } })[];
-    }>("/leaderboard", 120),
+      users: (RawUserLite & {
+        seasonResult?: { phasePoint?: number; eloRate?: number; eloRank?: number };
+      })[];
+    }>(`/leaderboard${eloQ}`, 120),
     api<
       {
         rank: number;
@@ -152,32 +187,41 @@ export async function fetchBoards(): Promise<BoardsData> {
         user: RawUserLite;
         seed?: RawSeed | null;
       }[]
-    >("/record-leaderboard", 300),
-    api<{
-      endsAt: number | null;
-      leaderboard: { rank: number; time: number; player: RawUserLite }[];
-    }>("/weekly-race", 300),
+    >(`/record-leaderboard${timesQ}`, 300),
+    api<RawWeekly>(weekId ? `/weekly-race/${weekId}` : "/weekly-race", 300),
   ]);
 
   const boards: BoardsData = {
-    season: null,
+    eloSeason: eloSeason ?? null,
+    timesSeason: timesSeason ?? null,
     elo: [],
     times: [],
     weekly: [],
+    weekId: null,
+    latestWeekId: null,
     weeklyEndsAt: null,
     error: null,
   };
 
   if (eloRes.status === "fulfilled") {
-    boards.season = eloRes.value.season.number;
-    boards.elo = eloRes.value.users.map((u, i) => ({
-      rank: u.eloRank ?? i + 1,
-      uuid: u.uuid,
-      name: u.nickname,
-      country: u.country,
-      elo: u.eloRate ?? 0,
-      phasePoint: u.seasonResult?.phasePoint ?? 0,
-    }));
+    boards.elo = eloRes.value.users.map((u, i) => {
+      // For a PAST season the live `eloRate`/`eloRank` fields are the player's
+      // CURRENT values (often null) — the season's real placement lives in
+      // `seasonResult`. Preferring it is what makes season switching work.
+      const sr = u.seasonResult;
+      const elo = eloSeason ? sr?.eloRate ?? u.eloRate ?? 0 : u.eloRate ?? 0;
+      const rank = eloSeason ? sr?.eloRank ?? i + 1 : u.eloRank ?? i + 1;
+      return {
+        rank,
+        uuid: u.uuid,
+        name: u.nickname,
+        country: u.country,
+        elo,
+        phasePoint: sr?.phasePoint ?? 0,
+      };
+    });
+    // Past-season payloads aren't always pre-sorted by that season's rating.
+    boards.elo.sort((a, b) => a.rank - b.rank);
   }
   if (timesRes.status === "fulfilled") {
     boards.times = timesRes.value.map((r) => ({
@@ -193,8 +237,10 @@ export async function fetchBoards(): Promise<BoardsData> {
     }));
   }
   if (weeklyRes.status === "fulfilled") {
-    boards.weeklyEndsAt = weeklyRes.value.endsAt;
-    boards.weekly = weeklyRes.value.leaderboard.map((e) => ({
+    const w = weeklyRes.value;
+    boards.weeklyEndsAt = w.endsAt;
+    boards.weekId = w.id ?? weekId ?? null;
+    boards.weekly = w.leaderboard.map((e) => ({
       rank: e.rank,
       uuid: e.player.uuid,
       name: e.player.nickname,
@@ -202,6 +248,18 @@ export async function fetchBoards(): Promise<BoardsData> {
       elo: e.player.eloRate,
       timeMs: e.time,
     }));
+  }
+
+  // Newest week id — needed to build the week dropdown when viewing an old week.
+  if (weekId) {
+    try {
+      const live = await api<RawWeekly>("/weekly-race", 300);
+      boards.latestWeekId = live.id ?? null;
+    } catch {
+      boards.latestWeekId = weekId;
+    }
+  } else {
+    boards.latestWeekId = boards.weekId;
   }
 
   if (!boards.elo.length && !boards.times.length && !boards.weekly.length) {
@@ -248,6 +306,8 @@ export interface RunRow {
   eloAfter: number | null;
   overworld: string | null;
   bastion: string | null;
+  /** True for private-room (type 3) matches. */
+  private: boolean;
 }
 
 export interface ProfileData {
@@ -279,12 +339,29 @@ export interface ProfileData {
   /** Per-sampled-completion phase segments tagged with seed sub-types, so
    *  the client can break down any split by overworld / bastion type. */
   splitSamples: SplitSample[];
+  /** Death stats from sampled match timelines. */
+  deaths: { sampled: number; withDeath: number; total: number };
+  /** Death rate per seed sub-type (overworld / bastion). */
+  deathByType: Record<
+    "overworld" | "bastion",
+    Record<string, { runs: number; withDeath: number; deaths: number }>
+  >;
+  /** The season these numbers are for, and whether private rooms are folded in. */
+  requestedSeason: number | null;
+  includesPrivate: boolean;
+  /** How many recent matches were sampled for splits/deaths. */
+  sampleSize: number;
 }
 
 export interface SplitSample {
+  matchId: number;
   overworld: string | null;
   bastion: string | null;
-  segments: Record<SplitKey, number>;
+  /** Only phases that qualify (see qualifiedSegments) are present. */
+  segments: Partial<Record<SplitKey, number>>;
+  /** Deaths recorded in this run (0 = clean run). */
+  deaths: number;
+  completed: boolean;
 }
 
 const CHECKPOINTS: { key: SplitKey; type: string }[] = [
@@ -297,32 +374,54 @@ const CHECKPOINTS: { key: SplitKey; type: string }[] = [
   { key: "dragon", type: "projectelo.timeline.dragon_death" },
 ];
 
-/** Cumulative checkpoint times → per-phase segments; null if incomplete. */
-function segmentsFromTimeline(
+const LAST_CP = CHECKPOINTS.length - 1;
+
+/**
+ * Per-phase segments that are trustworthy enough to average.
+ *
+ * A phase only counts once the runner clearly moved past it — specifically when
+ * they reached the checkpoint TWO phases later (so a bastion split needs a
+ * fortress and a blind, a blinding split needs the dragon, etc). Near the end of
+ * the run there is no "two later", so those phases require a completion. Every
+ * phase of a completed run always counts.
+ *
+ * Runs that were abandoned mid-phase therefore contribute their solid early
+ * splits without polluting the averages with the phase they quit in.
+ */
+function qualifiedSegments(
   events: { time: number; type: string }[],
   finalTimeMs: number | null,
-): Record<SplitKey, number> | null {
+  completed: boolean,
+): Partial<Record<SplitKey, number>> {
   const at = new Map<string, number>();
   for (const e of events) {
     const prev = at.get(e.type);
     if (prev === undefined || e.time < prev) at.set(e.type, e.time);
   }
-  const cum: number[] = [];
-  for (const cp of CHECKPOINTS) {
+
+  // Cumulative time at each checkpoint; null where never reached.
+  const cum: (number | null)[] = CHECKPOINTS.map((cp) => {
     let t = at.get(cp.type);
     if (t === undefined && cp.key === "dragon") {
-      t = at.get("end.kill_dragon") ?? finalTimeMs ?? undefined;
+      t = at.get("end.kill_dragon") ?? (completed ? finalTimeMs ?? undefined : undefined);
     }
-    if (t === undefined) return null;
-    cum.push(t);
-  }
-  const segs = {} as Record<SplitKey, number>;
-  let prev = 0;
-  for (let i = 0; i < CHECKPOINTS.length; i++) {
-    const seg = cum[i] - prev;
-    if (seg < 0) return null;
-    segs[CHECKPOINTS[i].key] = seg;
-    prev = cum[i];
+    return t ?? null;
+  });
+
+  const segs: Partial<Record<SplitKey, number>> = {};
+  for (let i = 0; i <= LAST_CP; i++) {
+    const end = cum[i];
+    const start = i === 0 ? 0 : cum[i - 1];
+    if (end === null || start === null || end < start) continue;
+
+    // Needs the checkpoint two phases later — or a completion when that would
+    // run past the end of the run.
+    const needIdx = i + 2;
+    const qualifies =
+      completed || (needIdx <= LAST_CP && cum[needIdx] !== null);
+    if (!qualifies) continue;
+
+    segs[CHECKPOINTS[i].key] = end - start;
   }
   return segs;
 }
@@ -331,30 +430,71 @@ const num = (v: unknown): number => (typeof v === "number" ? v : 0);
 
 export async function fetchProfile(
   name: string,
+  opts: {
+    season?: number;
+    includePrivate?: boolean;
+    /** How many recent matches to pull timelines from (splits + deaths). */
+    sampleSize?: number;
+  } = {},
 ): Promise<{ ok: true; data: ProfileData } | { ok: false; error: string }> {
+  const { season, includePrivate = false } = opts;
+  const sampleSize = Math.min(500, Math.max(5, opts.sampleSize ?? 20));
+  const sq = seasonQ(season);
+  const seasonMatchQ = season ? `&season=${season}` : "";
+
   let user: any;
   try {
-    user = await api<any>(`/users/${encodeURIComponent(name.trim())}`, 60);
+    user = await api<any>(`/users/${encodeURIComponent(name.trim())}${sq}`, 60);
   } catch (e) {
     return {
       ok: false,
-      error: `No ranked player named “${name}” — nicknames are exact (try the leaderboard).`,
+      error: `No player named “${name}” — usernames are exact (try the leaderboard).`,
     };
   }
 
-  let matches: RawMatch[] = [];
-  try {
-    matches = await api<RawMatch[]>(
-      `/users/${user.uuid}/matches?count=100&type=2`,
-      120,
-    );
-  } catch {
-    /* profile still renders without match history */
-  }
-
   const me = user.uuid as string;
-  const ranked = matches.filter((m) => m.type === 2 && !m.decayed);
-  const runs: RunRow[] = ranked.map((m) => {
+
+  // The API caps a match page at 100, so walk backwards with the `before`
+  // cursor until we have enough history for the requested sample size.
+  const wanted = Math.max(100, sampleSize);
+  const fetchHistory = async (type: 2 | 3): Promise<RawMatch[]> => {
+    const out: RawMatch[] = [];
+    let before: number | null = null;
+    while (out.length < wanted) {
+      const cursor: string = before ? `&before=${before}` : "";
+      let page: RawMatch[];
+      try {
+        page = await api<RawMatch[]>(
+          `/users/${me}/matches?count=100&type=${type}${seasonMatchQ}${cursor}`,
+          120,
+        );
+      } catch {
+        break;
+      }
+      if (!page.length) break;
+      out.push(...page);
+      const oldest = page[page.length - 1]?.id;
+      if (!oldest || oldest === before) break;
+      before = oldest;
+      if (page.length < 100) break; // reached the end of their history
+    }
+    return out;
+  };
+
+  const histories = await Promise.allSettled([
+    fetchHistory(2),
+    ...(includePrivate ? [fetchHistory(3)] : []),
+  ]);
+  let matches: RawMatch[] = [];
+  for (const r of histories) {
+    if (r.status === "fulfilled") matches = matches.concat(r.value);
+  }
+  // `before` pages can overlap at the boundary — keep one row per match id.
+  matches = Array.from(new Map(matches.map((m) => [m.id, m])).values());
+
+  const usable = matches.filter((m) => !m.decayed);
+  usable.sort((a, b) => (b.date ?? 0) - (a.date ?? 0)); // newest first
+  const runs: RunRow[] = usable.map((m) => {
     const opp = m.players.find((p) => p.uuid !== me);
     const won = m.result?.uuid === me;
     const ch = m.changes?.find((c) => c.uuid === me);
@@ -366,7 +506,7 @@ export async function fetchProfile(
     return {
       id: m.id,
       dateSec: m.date ?? null,
-      opponent: opp?.nickname ?? "—",
+      opponent: opp?.nickname ?? (m.type === 3 ? "Private room" : "—"),
       won,
       draw: !m.result?.uuid,
       forfeited: m.forfeited,
@@ -375,6 +515,7 @@ export async function fetchProfile(
       eloAfter,
       overworld: m.seed?.overworld ?? null,
       bastion: m.seed?.nether ?? null,
+      private: m.type === 3,
     };
   });
 
@@ -382,50 +523,104 @@ export async function fetchProfile(
     (r) => r.won && !r.forfeited && r.timeMs !== null,
   );
 
-  // Sample recent completions' timelines for split averages (bounded fan-out).
-  // Sampling enough to break splits down by seed sub-type while staying cached.
-  const sampled = completedWins.slice(0, 20);
-  const details = await Promise.allSettled(
-    sampled.map((r) => api<RawMatchDetail>(`/matches/${r.id}`, 600)),
-  );
-  const perRunSegments: Record<SplitKey, number>[] = [];
+  // Sample the most recent matches' timelines for splits and deaths. Requests go
+  // out in batches so a large sample size doesn't open hundreds of sockets at once.
+  const sampled = runs.slice(0, sampleSize);
+  const BATCH = 25;
+  const details: PromiseSettledResult<RawMatchDetail>[] = [];
+  for (let i = 0; i < sampled.length; i += BATCH) {
+    const chunk = sampled.slice(i, i + BATCH);
+    details.push(
+      ...(await Promise.allSettled(
+        chunk.map((r) => api<RawMatchDetail>(`/matches/${r.id}`, 600)),
+      )),
+    );
+  }
+
+  let deathSampled = 0;
+  let deathWith = 0;
+  let deathTotal = 0;
+  /** Deaths per seed sub-type, for per-bastion / per-overworld death rates. */
+  const deathByType: Record<
+    "overworld" | "bastion",
+    Record<string, { runs: number; withDeath: number; deaths: number }>
+  > = { overworld: {}, bastion: {} };
+
   const splitSamples: SplitSample[] = [];
   details.forEach((d, i) => {
     if (d.status !== "fulfilled") return;
+    deathSampled++;
     const mine = (d.value.timelines ?? []).filter((t) => t.uuid === me);
-    const segs = segmentsFromTimeline(mine, d.value.result?.time ?? null);
-    if (!segs) return;
-    perRunSegments.push(segs);
-    splitSamples.push({
-      overworld: sampled[i].overworld,
-      bastion: sampled[i].bastion,
-      segments: segs,
-    });
+    const nDeath = mine.filter(
+      (t) => t.type === "projectelo.timeline.death",
+    ).length;
+    if (nDeath > 0) deathWith++;
+    deathTotal += nDeath;
+
+    for (const field of ["overworld", "bastion"] as const) {
+      const key = sampled[i][field];
+      if (!key) continue;
+      const bucket = (deathByType[field][key] ??= {
+        runs: 0,
+        withDeath: 0,
+        deaths: 0,
+      });
+      bucket.runs++;
+      if (nDeath > 0) bucket.withDeath++;
+      bucket.deaths += nDeath;
+    }
+
+    const row = sampled[i];
+    const completed =
+      row.won && !row.forfeited && (d.value.result?.time ?? null) !== null;
+    const segs = qualifiedSegments(mine, d.value.result?.time ?? null, completed);
+    if (Object.keys(segs).length > 0) {
+      splitSamples.push({
+        matchId: row.id,
+        overworld: row.overworld,
+        bastion: row.bastion,
+        segments: segs,
+        deaths: nDeath,
+        completed,
+      });
+    }
   });
+
+  // Best 4/5 average per phase — trims the slowest fifth as outliers — plus the
+  // match id the fastest segment came from (for click-through). Each phase is
+  // averaged over however many runs qualified for THAT phase.
   const splits: SplitData[] | null =
-    perRunSegments.length === 0
+    splitSamples.length === 0
       ? null
       : SPLIT_ORDER.map((key) => {
-          const vals = perRunSegments.map((s) => s[key]);
+          const rows = splitSamples
+            .filter((s) => s.segments[key] !== undefined)
+            .map((s) => ({ v: s.segments[key] as number, id: s.matchId }))
+            .sort((a, b) => a.v - b.v);
+          if (rows.length === 0) {
+            return { key, avgMs: 0, bestMs: 0, bestMatchId: null };
+          }
+          const keep = Math.max(1, Math.ceil(rows.length * 0.8));
+          const best = rows.slice(0, keep);
           return {
             key,
-            avgMs: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
-            bestMs: Math.min(...vals),
+            avgMs: Math.round(best.reduce((a, b) => a + b.v, 0) / best.length),
+            bestMs: rows[0].v,
+            bestMatchId: rows[0].id,
           };
         });
 
   const s = user.statistics?.season ?? {};
   const t = user.statistics?.total ?? {};
+  const sr = user.seasonResult ?? {};
   const data: ProfileData = {
     uuid: me,
     name: user.nickname,
     country: user.country ?? null,
-    elo: user.eloRate ?? null,
-    eloRank: user.eloRank ?? null,
-    peakElo:
-      typeof user.seasonResult?.highest === "number"
-        ? user.seasonResult.highest
-        : null,
+    // For a past season, use that season's result rating rather than live Elo.
+    elo: season != null ? (sr.eloRate ?? null) : (user.eloRate ?? null),
+    eloRank: season != null ? (sr.eloRank ?? null) : (user.eloRank ?? null),
+    peakElo: typeof sr.highest === "number" ? sr.highest : null,
     season: {
       pbMs: s.bestTime?.ranked ?? null,
       wins: num(s.wins?.ranked),
@@ -439,11 +634,16 @@ export async function fetchProfile(
     },
     lifetimeCompletions: num(t.completions?.ranked),
     lifetimeMatches: num(t.playedMatches?.ranked),
-    completionTimes: completedWins.map((r) => r.timeMs!) ,
+    completionTimes: completedWins.map((r) => r.timeMs!),
     runs,
     splits,
-    sampledRuns: perRunSegments.length,
+    sampledRuns: splitSamples.length,
     splitSamples,
+    deaths: { sampled: deathSampled, withDeath: deathWith, total: deathTotal },
+    deathByType,
+    requestedSeason: season ?? null,
+    includesPrivate: includePrivate,
+    sampleSize,
   };
   return { ok: true, data };
 }

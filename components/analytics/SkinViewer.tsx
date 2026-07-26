@@ -76,9 +76,11 @@ interface Part {
   cy: number;
   cz: number;
   uv: Record<Face, [number, number]>;
+  /** Outer skin layer (hat / jacket / sleeves), drawn slightly inflated. */
+  overlay?: boolean;
 }
 
-const PARTS_MODERN: Record<string, Part> = {
+const BASE_MODERN: Record<string, Part> = {
   head: { w: 8, h: 8, d: 8, cx: 0, cy: -12, cz: 0, uv: { top: [8, 0], bottom: [16, 0], right: [0, 8], front: [8, 8], left: [16, 8], back: [24, 8] } },
   body: { w: 8, h: 12, d: 4, cx: 0, cy: -2, cz: 0, uv: { top: [20, 16], bottom: [28, 16], right: [16, 20], front: [20, 20], left: [28, 20], back: [32, 20] } },
   rightArm: { w: 4, h: 12, d: 4, cx: -6, cy: -2, cz: 0, uv: { top: [44, 16], bottom: [48, 16], right: [40, 20], front: [44, 20], left: [48, 20], back: [52, 20] } },
@@ -86,10 +88,25 @@ const PARTS_MODERN: Record<string, Part> = {
   rightLeg: { w: 4, h: 12, d: 4, cx: -2, cy: 10, cz: 0, uv: { top: [4, 16], bottom: [8, 16], right: [0, 20], front: [4, 20], left: [8, 20], back: [12, 20] } },
   leftLeg: { w: 4, h: 12, d: 4, cx: 2, cy: 10, cz: 0, uv: { top: [20, 48], bottom: [24, 48], right: [16, 52], front: [20, 52], left: [24, 52], back: [28, 52] } },
 };
+
+/** Outer-layer UV regions (64x64 skins only). */
+const OVERLAY_MODERN: Record<string, Part> = {
+  headOverlay: { ...BASE_MODERN.head, overlay: true, uv: { top: [40, 0], bottom: [48, 0], right: [32, 8], front: [40, 8], left: [48, 8], back: [56, 8] } },
+  bodyOverlay: { ...BASE_MODERN.body, overlay: true, uv: { top: [20, 32], bottom: [28, 32], right: [16, 36], front: [20, 36], left: [28, 36], back: [32, 36] } },
+  rightArmOverlay: { ...BASE_MODERN.rightArm, overlay: true, uv: { top: [44, 32], bottom: [48, 32], right: [40, 36], front: [44, 36], left: [48, 36], back: [52, 36] } },
+  leftArmOverlay: { ...BASE_MODERN.leftArm, overlay: true, uv: { top: [52, 48], bottom: [56, 48], right: [48, 52], front: [52, 52], left: [56, 52], back: [60, 52] } },
+  rightLegOverlay: { ...BASE_MODERN.rightLeg, overlay: true, uv: { top: [4, 32], bottom: [8, 32], right: [0, 36], front: [4, 36], left: [8, 36], back: [12, 36] } },
+  leftLegOverlay: { ...BASE_MODERN.leftLeg, overlay: true, uv: { top: [4, 48], bottom: [8, 48], right: [0, 52], front: [4, 52], left: [8, 52], back: [12, 52] } },
+};
+
+const PARTS_MODERN: Record<string, Part> = { ...BASE_MODERN, ...OVERLAY_MODERN };
+
+// Legacy 64x32 skins only carry the hat overlay, and mirror the right limbs.
 const PARTS_LEGACY: Record<string, Part> = {
-  ...PARTS_MODERN,
-  leftArm: { ...PARTS_MODERN.rightArm, cx: 6 },
-  leftLeg: { ...PARTS_MODERN.rightLeg, cx: 2 },
+  ...BASE_MODERN,
+  leftArm: { ...BASE_MODERN.rightArm, cx: 6 },
+  leftLeg: { ...BASE_MODERN.rightLeg, cx: 2 },
+  headOverlay: OVERLAY_MODERN.headOverlay,
 };
 
 const FACES: Face[] = ["front", "back", "right", "left", "top", "bottom"];
@@ -102,9 +119,12 @@ function faceEl(face: Face, part: Part, skinUrl: string): JSX.Element {
       : face === "left" || face === "right"
         ? [part.d, part.h]
         : [part.w, part.h];
-  const halfW = (part.w * SCALE) / 2;
-  const halfH = (part.h * SCALE) / 2;
-  const halfD = (part.d * SCALE) / 2;
+  // Push the outer layer a fraction of a texel outward so it never z-fights
+  // with the base skin underneath it.
+  const pad = part.overlay ? SCALE * 0.5 : 0;
+  const halfW = (part.w * SCALE) / 2 + pad;
+  const halfH = (part.h * SCALE) / 2 + pad;
+  const halfD = (part.d * SCALE) / 2 + pad;
   const transform: Record<Face, string> = {
     front: `translate(-50%,-50%) rotateY(0deg) translateZ(${halfD}px)`,
     back: `translate(-50%,-50%) rotateY(180deg) translateZ(${halfD}px)`,
@@ -118,10 +138,13 @@ function faceEl(face: Face, part: Part, skinUrl: string): JSX.Element {
       key={face}
       style={{
         position: "absolute", left: "50%", top: "50%",
-        width: fw * SCALE, height: fh * SCALE, transform: transform[face],
+        width: fw * SCALE + pad * 2,
+        height: fh * SCALE + pad * 2,
+        transform: transform[face],
         backgroundImage: `url(${skinUrl})`,
-        backgroundSize: `${64 * SCALE}px ${64 * SCALE}px`,
-        backgroundPosition: `-${u * SCALE}px -${v * SCALE}px`,
+        // Scale the texture with the inflated face so the art still lines up.
+        backgroundSize: `${64 * SCALE + (pad * 2 * 64) / fw}px ${64 * SCALE + (pad * 2 * 64) / fh}px`,
+        backgroundPosition: `-${u * SCALE + (u * pad * 2) / fw}px -${v * SCALE + (v * pad * 2) / fh}px`,
         imageRendering: "pixelated", backfaceVisibility: "hidden",
       }}
     />
@@ -187,6 +210,16 @@ const CUV: Record<string, Record<CFace, [number, number]>> = {
   leftArm: { front: [36, 52], back: [44, 52], right: [32, 52], left: [40, 52] },
   rightLeg: { front: [4, 20], back: [12, 20], right: [0, 20], left: [8, 20] },
   leftLeg: { front: [20, 52], back: [28, 52], right: [16, 52], left: [24, 52] },
+};
+
+/** Outer-layer UVs, drawn over the base (64x64 skins; head-only on legacy). */
+const CUV_OVERLAY: Record<string, Record<CFace, [number, number]>> = {
+  head: { front: [40, 8], back: [56, 8], right: [32, 8], left: [48, 8] },
+  body: { front: [20, 36], back: [32, 36], right: [16, 36], left: [28, 36] },
+  rightArm: { front: [44, 36], back: [52, 36], right: [40, 36], left: [48, 36] },
+  leftArm: { front: [52, 52], back: [60, 52], right: [48, 52], left: [56, 52] },
+  rightLeg: { front: [4, 36], back: [12, 36], right: [0, 36], left: [8, 36] },
+  leftLeg: { front: [4, 52], back: [12, 52], right: [0, 52], left: [8, 52] },
 };
 
 interface Piece { part: string; face: CFace; dx: number; dy: number; w: number; h: number }
@@ -274,6 +307,15 @@ function SkinCanvas({ uuid }: { uuid: string }) {
         u, uy, p.w, p.h,
         offX + p.dx * SCALE, offY + p.dy * SCALE, p.w * SCALE, p.h * SCALE,
       );
+      // Outer layer on top (legacy skins only carry the hat).
+      if (!legacy || part === "head") {
+        const [ou, ov] = CUV_OVERLAY[part][p.face];
+        ctx.drawImage(
+          image,
+          ou, ov, p.w, p.h,
+          offX + p.dx * SCALE, offY + p.dy * SCALE, p.w * SCALE, p.h * SCALE,
+        );
+      }
     }
   }, [status, legacy, view, img]);
 

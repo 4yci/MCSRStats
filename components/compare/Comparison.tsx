@@ -12,7 +12,7 @@ import {
   tierForElo,
 } from "@/lib/meta";
 import { SPLIT_ORDER } from "@/lib/types";
-import { PageHeader, TierChip } from "@/components/ui";
+import { PageHeader, SeasonSelect, TierChip } from "@/components/ui";
 import SkinViewer from "@/components/analytics/SkinViewer";
 import MatchDetail from "@/components/analytics/MatchDetail";
 
@@ -343,7 +343,7 @@ function Dashboard({
         </div>
         <div className="mt-1 text-center text-xs text-charcoal-300">
           {h2h.matches.length > 0
-            ? `${h2h.matches.length} ranked meeting${h2h.matches.length === 1 ? "" : "s"} in loaded history${h2h.draws ? ` · ${h2h.draws} draw${h2h.draws === 1 ? "" : "s"}` : ""}`
+            ? `${h2h.matches.length} direct match${h2h.matches.length === 1 ? "" : "es"} in loaded history${h2h.draws ? ` · ${h2h.draws} draw${h2h.draws === 1 ? "" : "s"}` : ""}`
             : "No direct ranked matches in the last 100 games of either runner"}
         </div>
       </div>
@@ -519,21 +519,31 @@ export default function Comparison({
   b,
   roster,
   error,
+  season = null,
+  currentSeason = null,
 }: {
   a?: ProfileData;
   b?: ProfileData;
   roster: string[];
   error?: string;
+  season?: number | null;
+  currentSeason?: number | null;
 }) {
   const router = useRouter();
   const [nameA, setNameA] = useState(a?.name ?? "");
   const [nameB, setNameB] = useState(b?.name ?? "");
   const [openMatch, setOpenMatch] = useState<number | null>(null);
 
+  const buildUrl = (na: string, nb: string, sn: number | null) => {
+    const p = new URLSearchParams();
+    if (na.trim()) p.set("a", na.trim());
+    if (nb.trim()) p.set("b", nb.trim());
+    if (sn) p.set("season", String(sn));
+    return `/compare?${p.toString()}`;
+  };
+
   const go = (na: string, nb: string) => {
-    if (na.trim() && nb.trim()) {
-      router.push(`/compare?a=${encodeURIComponent(na.trim())}&b=${encodeURIComponent(nb.trim())}`);
-    }
+    if (na.trim() && nb.trim()) router.push(buildUrl(na, nb, season));
   };
 
   return (
@@ -556,6 +566,17 @@ export default function Comparison({
         >
           Compare →
         </button>
+        <div className="pb-0.5">
+          <SeasonSelect
+            value={season}
+            max={currentSeason}
+            onChange={(sn) =>
+              router.push(
+                buildUrl(nameA, nameB, sn === currentSeason ? null : sn),
+              )
+            }
+          />
+        </div>
       </div>
 
       {error && (

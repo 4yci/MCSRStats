@@ -16,8 +16,8 @@ import {
   tierForElo,
   tierForSplit,
 } from "@/lib/meta";
-import { SplitKey, SPLIT_ORDER, Tier } from "@/lib/types";
-import { Bar, PageHeader, StatCard, TierChip } from "@/components/ui";
+import { SplitData, SplitKey, SPLIT_ORDER, Tier } from "@/lib/types";
+import { Bar, PageHeader, SeasonSelect, StatCard, TierChip } from "@/components/ui";
 import MatchDetail from "./MatchDetail";
 import SkinViewer from "./SkinViewer";
 
@@ -59,7 +59,7 @@ function PlayerSearch({
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => e.key === "Enter" && go(query)}
-        placeholder="Exact nickname, or pick from the top 150…"
+        placeholder="Exact username"
         className={`w-full rounded-xl border border-charcoal-500 bg-charcoal-700 text-white placeholder-charcoal-300 outline-none transition-all duration-300 focus:border-accent-blue/60 focus:shadow-glow-blue ${
           compact ? "px-4 py-2 text-sm" : "px-5 py-3.5"
         }`}
@@ -106,12 +106,19 @@ function SplitRankChip({ phase, ms }: { phase: SplitKey; ms: number }) {
 function SplitChart({
   profile,
   paceTier,
+  splits,
+  usedRuns,
+  onOpenMatch,
+  avgMode,
 }: {
   profile: ProfileData;
   paceTier: Tier | null;
+  splits: SplitData[] | null;
+  usedRuns: number;
+  onOpenMatch: (id: number) => void;
+  avgMode: SplitAvgMode;
 }) {
   const [hovered, setHovered] = useState<SplitKey | null>(null);
-  const splits = profile.splits;
 
   const totalAvg = useMemo(
     () => (splits ? splits.reduce((s, d) => s + d.avgMs, 0) : 0),
@@ -142,8 +149,9 @@ function SplitChart({
         <div>
           <h2 className="font-semibold text-white">Phase & Split Analytics</h2>
           <p className="text-xs text-charcoal-300">
-            Averaged from the last {profile.sampledRuns} ranked completion
-            {profile.sampledRuns === 1 ? "" : "s"} — compared against the{" "}
+            {avgMode === "best45" ? "Best 4/5" : "All"} of {usedRuns} sampled run
+            {usedRuns === 1 ? "" : "s"} — each phase counts a run only once it was
+            cleared by two more splits — compared against the{" "}
             <span className="font-semibold" style={{ color: tierColor }}>
               {paceTier}
             </span>{" "}
@@ -216,7 +224,21 @@ function SplitChart({
                   </div>
                   <div className="flex items-center gap-4 font-mono text-xs">
                     <span className="text-charcoal-300">
-                      best <span className="font-bold text-accent-green">{formatSegment(d.bestMs)}</span>
+                      best{" "}
+                      {d.bestMatchId ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMatch(d.bestMatchId!);
+                          }}
+                          title="Open the match this split came from"
+                          className="font-bold text-accent-green underline decoration-dotted underline-offset-2 transition-colors duration-300 hover:text-white"
+                        >
+                          {formatSegment(d.bestMs)}
+                        </button>
+                      ) : (
+                        <span className="font-bold text-accent-green">{formatSegment(d.bestMs)}</span>
+                      )}
                     </span>
                     <span className="flex items-center gap-1.5 text-charcoal-300">
                       avg <span className="font-bold text-white">{formatSegment(d.avgMs)}</span>
@@ -250,8 +272,7 @@ function SplitChart({
 
 /* ── Split comparison across all ranks ────────────────────────────── */
 
-function RankComparisonTable({ profile }: { profile: ProfileData }) {
-  const splits = profile.splits;
+function RankComparisonTable({ splits }: { splits: SplitData[] | null }) {
   const mine = useMemo(() => {
     const m = new Map<SplitKey, number>();
     splits?.forEach((s) => m.set(s.key, s.avgMs));
@@ -696,13 +717,22 @@ function bucketize(
 
 const winPct = (b: SeedBucket) =>
   b.wins + b.losses === 0 ? 0 : (b.wins / (b.wins + b.losses)) * 100;
-const wpColor = (p: number) => (p >= 55 ? "#00e676" : p >= 45 ? "#ffc400" : "#ff5252");
+/**
+ * Color from the ROUNDED value, so a displayed "56%" is always the same color
+ * in every table (previously 55.4 showed "55%" amber while 55.6 showed "56%"
+ * green, which read as inconsistent between the overworld and bastion tabs).
+ */
+const wpColor = (p: number) => {
+  const r = Math.round(p);
+  return r >= 55 ? "#00e676" : r >= 45 ? "#ffc400" : "#ff5252";
+};
 
 function SeedTable({
   buckets,
   splitCol,
   splitAvg,
   splitPhase,
+  deathStats,
 }: {
   buckets: SeedBucket[];
   /** Header label for the seed-specific split column. */
@@ -711,6 +741,8 @@ function SeedTable({
   splitAvg: Map<string, { avgMs: number; n: number }>;
   /** Which phase that column measures — drives the rank badge. */
   splitPhase: SplitKey;
+  /** type key → death counts from the sampled runs. */
+  deathStats: Record<string, { runs: number; withDeath: number; deaths: number }>;
 }) {
   // Strongest / weakest need a minimum sample to be meaningful.
   const eligible = buckets.filter((b) => b.wins + b.losses >= 3);
@@ -730,7 +762,7 @@ function SeedTable({
       <table className="w-full text-left">
         <thead>
           <tr className="border-b border-charcoal-500/60">
-            {["Type", "Played", "Win %", splitCol, "Avg Finish", "Best"].map((h) => (
+            {["Type", "Played", "Win %", "Death Rate", splitCol, "Avg Finish", "Best"].map((h) => (
               <th key={h} className="px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest text-charcoal-300">
                 {h}
               </th>
@@ -768,6 +800,24 @@ function SeedTable({
                     </div>
                     <span className="font-mono text-xs" style={{ color: wpColor(p) }}>{p.toFixed(0)}%</span>
                   </div>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 font-mono text-sm">
+                  {(() => {
+                    const ds = deathStats[b.key];
+                    if (!ds || ds.runs === 0)
+                      return <span className="text-charcoal-300">—</span>;
+                    const rate = (ds.withDeath / ds.runs) * 100;
+                    const col =
+                      rate <= 10 ? "#00e676" : rate <= 30 ? "#ffc400" : "#ff5252";
+                    return (
+                      <span style={{ color: col }}>
+                        {rate.toFixed(0)}%
+                        <span className="ml-1 text-[10px] text-charcoal-300">
+                          n{ds.runs}
+                        </span>
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 font-mono text-sm text-accent-blue">
                   {splitAvg.has(b.key) ? (
@@ -808,9 +858,10 @@ function splitByType(
   const acc = new Map<string, { sum: number; n: number }>();
   for (const s of samples) {
     const k = s[field];
-    if (!k) continue;
+    const v = s.segments[phase];
+    if (!k || v === undefined) continue; // phase didn't qualify in this run
     const e = acc.get(k) ?? { sum: 0, n: 0 };
-    e.sum += s.segments[phase];
+    e.sum += v;
     e.n += 1;
     acc.set(k, e);
   }
@@ -839,6 +890,7 @@ function SeedBreakdown({ profile }: { profile: ProfileData }) {
   const splitAvg = tab === "overworld" ? owSplit : bastionSplit;
   const splitCol = tab === "overworld" ? "Avg OW Split" : "Avg Bastion Split";
   const splitPhase: SplitKey = tab === "overworld" ? "ow" : "bastion";
+  const deathStats = profile.deathByType?.[tab] ?? {};
 
   return (
     <div className="panel overflow-hidden">
@@ -868,21 +920,171 @@ function SeedBreakdown({ profile }: { profile: ProfileData }) {
           ))}
         </div>
       </div>
-      <SeedTable buckets={buckets} splitCol={splitCol} splitAvg={splitAvg} splitPhase={splitPhase} />
+      <SeedTable
+        buckets={buckets}
+        splitCol={splitCol}
+        splitAvg={splitAvg}
+        splitPhase={splitPhase}
+        deathStats={deathStats}
+      />
     </div>
   );
 }
 
+/* ── Death breakdown donut ────────────────────────────────────────── */
+
+function DeathDonut({ profile }: { profile: ProfileData }) {
+  const [hover, setHover] = useState<"clean" | "died" | null>(null);
+  const d = profile.deaths;
+  if (!d || d.sampled === 0) return null;
+
+  const died = d.withDeath;
+  const clean = Math.max(0, d.sampled - died);
+  const diedPct = (died / d.sampled) * 100;
+  const cleanPct = 100 - diedPct;
+
+  // Donut geometry: one circle, two dash-offset arcs.
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const diedLen = (diedPct / 100) * C;
+
+  const seg = (
+    key: "clean" | "died",
+    color: string,
+    dash: number,
+    offset: number,
+  ) => (
+    <circle
+      cx="70" cy="70" r={R}
+      fill="none"
+      stroke={color}
+      strokeWidth={hover === key ? 20 : 16}
+      strokeDasharray={`${dash} ${C - dash}`}
+      strokeDashoffset={offset}
+      transform="rotate(-90 70 70)"
+      className="cursor-pointer transition-all duration-200"
+      onMouseEnter={() => setHover(key)}
+      onMouseLeave={() => setHover(null)}
+      onClick={() => setHover(hover === key ? null : key)}
+    />
+  );
+
+  const center =
+    hover === "died"
+      ? { big: `${diedPct.toFixed(0)}%`, small: `${died} run${died === 1 ? "" : "s"} with a death`, color: "#ff5252" }
+      : hover === "clean"
+        ? { big: `${cleanPct.toFixed(0)}%`, small: `${clean} clean run${clean === 1 ? "" : "s"}`, color: "#00e676" }
+        : { big: `${diedPct.toFixed(0)}%`, small: "of runs had a death", color: "#ff5252" };
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <h2 className="font-semibold text-white">Deaths</h2>
+          <p className="text-xs text-charcoal-300">
+            Across the last {d.sampled} sampled runs — hover or tap a segment.
+          </p>
+        </div>
+        <span className="chip border border-accent-red/40 bg-accent-red/10 text-accent-red">
+          {d.total} total death{d.total === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-6 p-5">
+        <div className="relative" style={{ width: 140, height: 140 }}>
+          <svg viewBox="0 0 140 140" width={140} height={140}>
+            <circle cx="70" cy="70" r={R} fill="none" stroke="#1d1d24" strokeWidth={16} />
+            {seg("died", "#ff5252", diedLen, 0)}
+            {seg("clean", "#00e676", C - diedLen, -diedLen)}
+          </svg>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="font-mono text-2xl font-black" style={{ color: center.color }}>
+              {center.big}
+            </span>
+            <span className="mt-0.5 max-w-[110px] text-[10px] leading-tight text-charcoal-300">
+              {center.small}
+            </span>
+          </div>
+        </div>
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: "#00e676" }} />
+            <span className="text-sm text-white">Clean runs</span>
+            <span className="font-mono text-sm text-charcoal-300">
+              {clean} · {cleanPct.toFixed(0)}%
+            </span>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: "#ff5252" }} />
+            <span className="text-sm text-white">Runs with a death</span>
+            <span className="font-mono text-sm text-charcoal-300">
+              {died} · {diedPct.toFixed(0)}%
+            </span>
+          </div>
+          <div className="border-t border-charcoal-500/60 pt-2.5 font-mono text-xs text-charcoal-300">
+            avg{" "}
+            <span className="font-bold text-white">
+              {(d.total / d.sampled).toFixed(2)}
+            </span>{" "}
+            deaths per run
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Which slice of a phase's qualifying runs feeds the average. */
+type SplitAvgMode = "best45" | "all";
+
+/** Recompute per-phase splits from samples, optionally death-free. */
+function splitsFromSamples(
+  samples: ProfileData["splitSamples"],
+  excludeDeaths: boolean,
+  mode: SplitAvgMode,
+): { splits: SplitData[] | null; used: number } {
+  const rows = excludeDeaths ? samples.filter((s) => s.deaths === 0) : samples;
+  if (rows.length === 0) return { splits: null, used: 0 };
+  const splits = SPLIT_ORDER.map((key) => {
+    // Each phase only averages the runs that qualified for that phase.
+    const vals = rows
+      .filter((s) => s.segments[key] !== undefined)
+      .map((s) => ({ v: s.segments[key] as number, id: s.matchId }))
+      .sort((a, b) => a.v - b.v);
+    if (vals.length === 0) {
+      return { key, avgMs: 0, bestMs: 0, bestMatchId: null };
+    }
+    // "best45" trims the slowest fifth as outliers; "all" keeps everything.
+    const keep =
+      mode === "all" ? vals.length : Math.max(1, Math.ceil(vals.length * 0.8));
+    const best = vals.slice(0, keep);
+    return {
+      key,
+      avgMs: Math.round(best.reduce((a, b) => a + b.v, 0) / best.length),
+      bestMs: vals[0].v,
+      bestMatchId: vals[0].id,
+    };
+  });
+  return { splits, used: rows.length };
+}
+
 /* ── Profile ──────────────────────────────────────────────────────── */
 
-type AvgMode = "half" | "n" | "all";
+type AvgMode = "threeQuarter" | "n" | "all";
 
-function Profile({ profile }: { profile: ProfileData }) {
+function Profile({
+  profile,
+  currentSeason,
+}: {
+  profile: ProfileData;
+  currentSeason: number | null;
+}) {
   const router = useRouter();
   const s = profile.season;
-  const [avgMode, setAvgMode] = useState<AvgMode>("half");
+  const [avgMode, setAvgMode] = useState<AvgMode>("threeQuarter");
   const [avgN, setAvgN] = useState(20);
   const [openMatch, setOpenMatch] = useState<number | null>(null);
+  const [excludeDeaths, setExcludeDeaths] = useState(false);
+  const [splitAvgMode, setSplitAvgMode] = useState<SplitAvgMode>("all");
 
   // Remember the last viewed player so returning to /analytics restores it.
   useEffect(() => {
@@ -893,16 +1095,31 @@ function Profile({ profile }: { profile: ProfileData }) {
     }
   }, [profile.name]);
 
+  /** Re-request this profile with different server-side options. */
+  const setParam = (patch: Record<string, string | null>) => {
+    const p = new URLSearchParams();
+    p.set("player", profile.name);
+    if (profile.requestedSeason) p.set("season", String(profile.requestedSeason));
+    if (profile.includesPrivate) p.set("private", "1");
+    if (profile.sampleSize !== 20) p.set("samples", String(profile.sampleSize));
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
+    router.push(`/analytics?${p.toString()}`);
+  };
+
   const sorted = useMemo(
     () => [...profile.completionTimes].sort((a, b) => a - b),
     [profile.completionTimes],
   );
 
-  // "Average of Best …" — window is ½ (default), a chosen N, or all recent
+  // "Average of Best …" — window is the best 3/4 (default), a chosen N, or all
   // completions. N larger than the pool simply behaves like "all".
   const avgWindow = useMemo(() => {
     if (sorted.length === 0) return 0;
-    if (avgMode === "half") return Math.max(1, Math.ceil(sorted.length / 2));
+    if (avgMode === "threeQuarter")
+      return Math.max(1, Math.ceil((sorted.length * 3) / 4));
     if (avgMode === "all") return sorted.length;
     return Math.max(1, Math.min(avgN, sorted.length));
   }, [avgMode, avgN, sorted.length]);
@@ -913,14 +1130,18 @@ function Profile({ profile }: { profile: ProfileData }) {
     return slice.reduce((a, b) => a + b, 0) / slice.length;
   }, [sorted, avgWindow]);
 
+  // Splits recomputed client-side so pace can include or exclude runs with deaths.
+  const { splits: effSplits, used: usedRuns } = useMemo(
+    () =>
+      splitsFromSamples(profile.splitSamples ?? [], excludeDeaths, splitAvgMode),
+    [profile.splitSamples, excludeDeaths, splitAvgMode],
+  );
+
   // Pace rank: the tier whose average completion time is closest to the
   // player's average pace (from sampled split timelines).
   const paceTotalMs = useMemo(
-    () =>
-      profile.splits
-        ? profile.splits.reduce((sum, d) => sum + d.avgMs, 0)
-        : null,
-    [profile.splits],
+    () => (effSplits ? effSplits.reduce((sum, d) => sum + d.avgMs, 0) : null),
+    [effSplits],
   );
   const paceTier = useMemo(
     () => (paceTotalMs !== null ? deservedTier(paceTotalMs) : null),
@@ -956,7 +1177,7 @@ function Profile({ profile }: { profile: ProfileData }) {
       {/* Identity banner */}
       <div className="panel flex flex-wrap items-center gap-5 px-6 py-5">
         <SkinViewer uuid={profile.uuid} fallback={fallbackAvatar} />
-        <div className="flex-1">
+        <div className="min-w-[260px] flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-white">
               {flagEmoji(profile.country)} {profile.name}
@@ -968,25 +1189,87 @@ function Profile({ profile }: { profile: ProfileData }) {
               </span>
             )}
           </div>
-          <div className="mt-1.5 flex flex-wrap gap-5 font-mono text-xs text-charcoal-300">
-            <span>Elo <span className="font-bold text-white">{profile.elo ?? "—"}</span></span>
-            {profile.peakElo !== null && (
-              <span>Peak <span className="font-bold text-accent-blue">{profile.peakElo}</span></span>
-            )}
-            <span>
-              Season{" "}
-              <span className="font-bold text-accent-green">{s.wins}W</span>
-              <span> / </span>
-              <span className="font-bold text-accent-red">{s.loses}L</span>
-              <span className="text-charcoal-300"> ({wr.toFixed(1)}%)</span>
-            </span>
-            <span>Best streak <span className="font-bold text-accent-amber">{s.bestStreak}</span></span>
-            <span>{(s.playtimeMs / 3_600_000).toFixed(0)}h ranked this season</span>
+
+          {/* Key figures as labelled tiles — easier to scan than one long line */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              { k: "Elo", v: profile.elo ?? "—", c: "text-white" },
+              { k: "Peak", v: profile.peakElo ?? "—", c: "text-accent-blue" },
+              { k: "Record", v: `${s.wins}W / ${s.loses}L`, c: "text-white" },
+              { k: "Win rate", v: `${wr.toFixed(1)}%`, c: "text-accent-green" },
+              { k: "Playtime", v: `${(s.playtimeMs / 3_600_000).toFixed(0)}h`, c: "text-white" },
+            ].map((x) => (
+              <div
+                key={x.k}
+                className="rounded-lg border border-charcoal-500/60 bg-charcoal-900/50 px-3 py-2"
+              >
+                <div className="font-mono text-[10px] uppercase tracking-widest text-charcoal-300">
+                  {x.k}
+                </div>
+                <div className={`mt-0.5 font-mono text-sm font-bold ${x.c}`}>{x.v}</div>
+              </div>
+            ))}
           </div>
+
           <div className="mt-2 font-mono text-[10px] uppercase tracking-widest text-charcoal-300">
-            ⟲ drag the skin to rotate
+            drag the skin to rotate
           </div>
         </div>
+      </div>
+
+      {/* View controls */}
+      <div className="panel flex flex-wrap items-center gap-3 px-5 py-3">
+        <SeasonSelect
+          value={profile.requestedSeason}
+          max={currentSeason}
+          onChange={(sn) =>
+            setParam({ season: sn === currentSeason ? null : String(sn) })
+          }
+        />
+
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-charcoal-500 bg-charcoal-700 px-3 py-2 text-sm text-charcoal-300 transition-colors duration-300 hover:text-white">
+          <input
+            type="checkbox"
+            checked={profile.includesPrivate}
+            onChange={(e) => setParam({ private: e.target.checked ? "1" : null })}
+            className="h-3.5 w-3.5 accent-[#00e5ff]"
+          />
+          Include private rooms
+        </label>
+
+        <label className="flex items-center gap-2 rounded-lg border border-charcoal-500 bg-charcoal-700 px-3 py-1.5">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-charcoal-300">
+            Sample
+          </span>
+          <select
+            value={profile.sampleSize}
+            onChange={(e) => setParam({ samples: e.target.value })}
+            className="cursor-pointer bg-transparent font-mono text-sm font-bold text-white outline-none"
+            title="How many recent matches to read timelines from"
+          >
+            {[20, 50, 100, 500].map((n) => (
+              <option key={n} value={n} className="bg-charcoal-800">
+                {n} runs
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-charcoal-500 bg-charcoal-700 px-3 py-2 text-sm text-charcoal-300 transition-colors duration-300 hover:text-white">
+          <input
+            type="checkbox"
+            checked={excludeDeaths}
+            onChange={(e) => setExcludeDeaths(e.target.checked)}
+            className="h-3.5 w-3.5 accent-[#00e676]"
+          />
+          Exclude runs with deaths
+        </label>
+
+        {profile.includesPrivate && (
+          <span className="chip border border-accent-purple/40 bg-accent-purple/10 text-accent-purple">
+            private rooms included
+          </span>
+        )}
       </div>
 
       {/* Top-line metrics */}
@@ -1006,7 +1289,7 @@ function Profile({ profile }: { profile: ProfileData }) {
           sub={
             <div className="mt-1">
               <div className="flex items-center gap-1">
-                {(["half", "n", "all"] as AvgMode[]).map((m) => (
+                {(["threeQuarter", "n", "all"] as AvgMode[]).map((m) => (
                   <button
                     key={m}
                     onClick={() => setAvgMode(m)}
@@ -1016,7 +1299,7 @@ function Profile({ profile }: { profile: ProfileData }) {
                         : "bg-charcoal-600 text-charcoal-300 hover:text-white"
                     }`}
                   >
-                    {m === "half" ? "Best" : m === "n" ? "N" : "All"}
+                    {m === "threeQuarter" ? "Best ¾" : m === "n" ? "N" : "All"}
                   </button>
                 ))}
                 {avgMode === "n" && (
@@ -1030,11 +1313,9 @@ function Profile({ profile }: { profile: ProfileData }) {
                 )}
               </div>
               <span className="mt-1 block">
-                {avgMode === "half"
-                  ? `best ${avgWindow} of last ${sorted.length}`
-                  : avgMode === "all"
-                    ? `all ${sorted.length} completions`
-                    : `best ${avgWindow} of last ${sorted.length}`}
+                {avgMode === "all"
+                  ? `all ${sorted.length} completions`
+                  : `best ${avgWindow} of last ${sorted.length}`}
               </span>
             </div>
           }
@@ -1068,6 +1349,7 @@ function Profile({ profile }: { profile: ProfileData }) {
         />
         <StatCard
           label="Completions / Played"
+          glow
           value={
             <>
               <span className="text-accent-green">{s.completions}</span>
@@ -1087,15 +1369,55 @@ function Profile({ profile }: { profile: ProfileData }) {
         />
         <StatCard
           label="Current Streak"
-          value={s.currentStreak > 0 ? `${s.currentStreak} 🔥` : "—"}
+          glow
+          value={s.currentStreak > 0 ? `${s.currentStreak}` : "—"}
           sub={`season best ${s.bestStreak}`}
           accent="text-accent-amber"
         />
       </div>
 
       <EloSection profile={profile} />
-      <SplitChart profile={profile} paceTier={paceTier} />
-      <RankComparisonTable profile={profile} />
+
+      {/* How each phase average is computed */}
+      <div className="panel flex flex-wrap items-center gap-3 px-5 py-3">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-charcoal-300">
+          Split average
+        </span>
+        <div className="flex rounded-lg bg-charcoal-700 p-1">
+          {([
+            ["best45", "Best 4/5"],
+            ["all", "All"],
+          ] as [SplitAvgMode, string][]).map(([m, label]) => (
+            <button
+              key={m}
+              onClick={() => setSplitAvgMode(m)}
+              className={`btn-tab px-4 text-xs ${
+                splitAvgMode === m
+                  ? "bg-accent-teal/30 text-accent-blue"
+                  : "text-charcoal-300 hover:text-white"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-charcoal-300">
+          {splitAvgMode === "best45"
+            ? "Trims the slowest fifth of each phase, so one bad run doesn't skew the pace."
+            : "Averages every qualifying run, outliers included."}
+        </span>
+      </div>
+
+      <SplitChart
+        profile={profile}
+        paceTier={paceTier}
+        splits={effSplits}
+        usedRuns={usedRuns}
+        onOpenMatch={setOpenMatch}
+        avgMode={splitAvgMode}
+      />
+      <DeathDonut profile={profile} />
+      <RankComparisonTable splits={effSplits} />
       <SeedBreakdown profile={profile} />
       <RecentMatches profile={profile} onOpen={setOpenMatch} />
 
@@ -1113,11 +1435,13 @@ export default function PlayerAnalytics({
   error,
   roster,
   forceMenu = false,
+  currentSeason = null,
 }: {
   profile?: ProfileData;
   error?: string;
   roster: string[];
   forceMenu?: boolean;
+  currentSeason?: number | null;
 }) {
   const router = useRouter();
   const [restoring, setRestoring] = useState(false);
@@ -1159,7 +1483,7 @@ export default function PlayerAnalytics({
         right={profile ? <PlayerSearch compact roster={roster} /> : undefined}
       />
       {profile ? (
-        <Profile profile={profile} />
+        <Profile profile={profile} currentSeason={currentSeason} />
       ) : (
         <div className="panel animate-fadeSlideUp px-8 py-16 text-center">
           <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent-teal/15 text-accent-blue">

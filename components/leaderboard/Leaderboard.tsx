@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
-import { BoardsData, EloEntry } from "@/lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { BoardsData } from "@/lib/api";
 import { formatTime } from "@/lib/format";
-import { flagEmoji, prettyEnum, tierForElo } from "@/lib/meta";
-import { TierBadge } from "@/components/ui";
+import { flagEmoji, prettyEnum, TIER_COLORS, tierForElo } from "@/lib/meta";
+import { SeasonSelect, TierBadge } from "@/components/ui";
 
 type Tab = "elo" | "times" | "weekly";
-type EloSort = "rank" | "elo" | "phase";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "elo", label: "Season Elo" },
@@ -22,13 +21,12 @@ const RANK_STYLES: Record<number, string> = {
   3: "text-accent-amber",
 };
 
-function Th({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
-  return (
-    <th className={`px-4 py-3 font-mono text-[11px] font-semibold uppercase tracking-widest text-charcoal-300 ${className}`}>
-      {children}
-    </th>
-  );
-}
+/** Default sort per tab: which column, ascending (rank) or the metric. */
+const DEFAULT_SORT: Record<Tab, string> = {
+  elo: "rank",
+  times: "rank",
+  weekly: "rank",
+};
 
 function RunnerCell({
   name,
@@ -40,64 +38,138 @@ function RunnerCell({
   elo: number | null;
 }) {
   return (
-    <Link
-      href={`/analytics?player=${encodeURIComponent(name)}`}
-      className="group/name flex items-center gap-2.5 font-semibold text-white transition-colors duration-300 hover:text-accent-blue"
-    >
+    <span className="flex items-center gap-2.5 font-semibold text-white">
       <TierBadge tier={tierForElo(elo)} />
       <span className="w-5 text-center">{flagEmoji(country) || "·"}</span>
-      {name}
-      <span className="text-[10px] uppercase tracking-wider text-charcoal-300 opacity-0 transition-opacity duration-300 group-hover/name:opacity-100">
-        profile →
-      </span>
-    </Link>
+      <span className="group-hover:text-accent-blue">{name}</span>
+    </span>
   );
 }
 
-function RankCell({ rank }: { rank: number }) {
-  return (
-    <td className={`px-4 py-3 font-mono text-sm font-bold ${RANK_STYLES[rank] ?? "text-charcoal-300"}`}>
-      #{rank}
-    </td>
-  );
-}
-
-export default function Leaderboard({ boards }: { boards: BoardsData }) {
+export default function Leaderboard({
+  boards,
+  currentSeason,
+}: {
+  boards: BoardsData;
+  currentSeason: number | null;
+}) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("elo");
   const [query, setQuery] = useState("");
-  const [eloSort, setEloSort] = useState<EloSort>("rank");
+  const [sortKey, setSortKey] = useState<string>("rank");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+
+  // Reset sort when switching tabs.
+  useEffect(() => {
+    setSortKey(DEFAULT_SORT[tab]);
+    setSortDir(1);
+  }, [tab]);
 
   const q = query.trim().toLowerCase();
   const match = (name: string) => q === "" || name.toLowerCase().includes(q);
 
-  const eloRows = useMemo(() => {
-    const valueOf = (e: EloEntry) =>
-      eloSort === "rank" ? e.rank : eloSort === "elo" ? e.elo : e.phasePoint;
-    return boards.elo
-      .filter((e) => match(e.name))
-      .sort((a, b) => (valueOf(a) - valueOf(b)) * sortDir);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boards.elo, q, eloSort, sortDir]);
-
-  const timeRows = useMemo(
-    () => boards.times.filter((e) => match(e.name)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boards.times, q],
-  );
-  const weeklyRows = useMemo(
-    () => boards.weekly.filter((e) => match(e.name)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boards.weekly, q],
-  );
-
-  const handleEloSort = (k: EloSort) => {
-    if (k === eloSort) setSortDir((d) => (d === 1 ? -1 : 1));
+  const toggleSort = (k: string) => {
+    if (k === sortKey) setSortDir((d) => (d === 1 ? -1 : 1));
     else {
-      setEloSort(k);
+      setSortKey(k);
       setSortDir(k === "rank" ? 1 : -1);
     }
   };
+
+  const openProfile = (name: string) =>
+    router.push(`/analytics?player=${encodeURIComponent(name)}`);
+
+  /** Each board keeps its own scope in the URL, so switching one never
+   *  silently re-scopes the others. */
+  const buildUrl = (patch: Record<string, string | null>) => {
+    const p = new URLSearchParams();
+    if (boards.eloSeason) p.set("season", String(boards.eloSeason));
+    if (boards.timesSeason === "all") p.set("times", "all");
+    else if (typeof boards.timesSeason === "number")
+      p.set("times", String(boards.timesSeason));
+    if (boards.weekId && boards.weekId !== boards.latestWeekId)
+      p.set("week", String(boards.weekId));
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) p.delete(k);
+      else p.set(k, v);
+    }
+    const q = p.toString();
+    return q ? `/?${q}` : "/";
+  };
+
+  const goEloSeason = (s: number) =>
+    router.push(buildUrl({ season: s === currentSeason ? null : String(s) }));
+  const goTimes = (v: string) => router.push(buildUrl({ times: v }));
+  const goWeek = (id: number) =>
+    router.push(
+      buildUrl({ week: id === boards.latestWeekId ? null : String(id) }),
+    );
+
+  const sortBy = <T,>(rows: T[], valueOf: (r: T) => number) =>
+    [...rows].sort((a, b) => (valueOf(a) - valueOf(b)) * sortDir);
+
+  const eloRows = useMemo(() => {
+    const filtered = boards.elo.filter((e) => match(e.name));
+    const valueOf = (e: (typeof boards.elo)[number]) =>
+      sortKey === "elo" ? e.elo : sortKey === "phase" ? e.phasePoint : e.rank;
+    return sortBy(filtered, valueOf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boards.elo, q, sortKey, sortDir]);
+
+  const timeRows = useMemo(() => {
+    const filtered = boards.times.filter((e) => match(e.name));
+    const valueOf = (e: (typeof boards.times)[number]) =>
+      sortKey === "time" ? e.timeMs : sortKey === "date" ? e.dateSec ?? 0 : e.rank;
+    return sortBy(filtered, valueOf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boards.times, q, sortKey, sortDir]);
+
+  const weeklyRows = useMemo(() => {
+    const filtered = boards.weekly.filter((e) => match(e.name));
+    const valueOf = (e: (typeof boards.weekly)[number]) =>
+      sortKey === "time" ? e.timeMs : sortKey === "elo" ? e.elo ?? 0 : e.rank;
+    return sortBy(filtered, valueOf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boards.weekly, q, sortKey, sortDir]);
+
+  const SortableTh = ({
+    col,
+    label,
+    className = "",
+  }: {
+    col: string;
+    label: string;
+    className?: string;
+  }) => (
+    <th className={`px-4 py-3 ${className}`}>
+      <button
+        onClick={() => toggleSort(col)}
+        className={`inline-flex items-center gap-1 font-mono text-[11px] font-semibold uppercase tracking-widest transition-colors duration-300 ${
+          sortKey === col ? "text-accent-blue" : "text-charcoal-300 hover:text-white"
+        }`}
+      >
+        {label}
+        <span className={`text-[9px] ${sortKey === col ? "" : "opacity-0"}`}>
+          {sortDir === 1 ? "▲" : "▼"}
+        </span>
+      </button>
+    </th>
+  );
+
+  const PlainTh = ({ label }: { label: string }) => (
+    <th className="px-4 py-3 font-mono text-[11px] font-semibold uppercase tracking-widest text-charcoal-300">
+      {label}
+    </th>
+  );
+
+  const rowClass =
+    "group cursor-pointer border-b border-charcoal-600/40 transition-colors duration-300 hover:bg-accent-teal/10";
+
+  const RankCell = ({ rank }: { rank: number }) => (
+    <td className={`px-4 py-3 font-mono text-sm font-bold ${RANK_STYLES[rank] ?? "text-charcoal-300"}`}>
+      #{rank}
+    </td>
+  );
 
   if (boards.error) {
     return (
@@ -138,25 +210,87 @@ export default function Leaderboard({ boards }: { boards: BoardsData }) {
 
         {tab === "weekly" && boards.weeklyEndsAt && (
           <span className="chip border border-accent-amber/40 bg-accent-amber/10 text-accent-amber">
-            ends {new Date(boards.weeklyEndsAt * 1000).toISOString().slice(0, 10)}
+            ended {new Date(boards.weeklyEndsAt * 1000).toISOString().slice(0, 10)}
           </span>
         )}
 
-        <div className="relative ml-auto">
-          <svg
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-300"
-            width="15" height="15" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search runner…"
-            className="w-56 rounded-lg border border-charcoal-500 bg-charcoal-700 py-2 pl-9 pr-3 text-sm text-white placeholder-charcoal-300 outline-none transition-all duration-300 focus:border-accent-blue/60 focus:shadow-glow-blue"
-          />
+        <div className="ml-auto flex items-center gap-3">
+          {/* Each board carries its own scope control. */}
+          {tab === "elo" && (
+            <SeasonSelect
+              value={boards.eloSeason}
+              max={currentSeason}
+              onChange={goEloSeason}
+            />
+          )}
+
+          {tab === "times" && currentSeason && (
+            <label className="flex items-center gap-2 rounded-lg border border-charcoal-500 bg-charcoal-700 px-3 py-1.5">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-charcoal-300">
+                Records
+              </span>
+              <select
+                value={
+                  boards.timesSeason === "all"
+                    ? "all"
+                    : String(boards.timesSeason ?? currentSeason)
+                }
+                onChange={(e) => goTimes(e.target.value)}
+                className="cursor-pointer bg-transparent font-mono text-sm font-bold text-white outline-none"
+              >
+                <option value="all" className="bg-charcoal-800">
+                  All time
+                </option>
+                {Array.from({ length: currentSeason }, (_, i) => currentSeason - i).map(
+                  (s) => (
+                    <option key={s} value={s} className="bg-charcoal-800">
+                      Season {s}
+                      {s === currentSeason ? " · current" : ""}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          )}
+
+          {tab === "weekly" && boards.latestWeekId && (
+            <label className="flex items-center gap-2 rounded-lg border border-charcoal-500 bg-charcoal-700 px-3 py-1.5">
+              <span className="font-mono text-[10px] font-semibold uppercase tracking-widest text-charcoal-300">
+                Week
+              </span>
+              <select
+                value={boards.weekId ?? boards.latestWeekId}
+                onChange={(e) => goWeek(Number(e.target.value))}
+                className="cursor-pointer bg-transparent font-mono text-sm font-bold text-white outline-none"
+              >
+                {Array.from(
+                  { length: boards.latestWeekId },
+                  (_, i) => boards.latestWeekId! - i,
+                ).map((w) => (
+                  <option key={w} value={w} className="bg-charcoal-800">
+                    #{w}
+                    {w === boards.latestWeekId ? " · current" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className="relative">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-300"
+              width="15" height="15" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.5-3.5" />
+            </svg>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search runner…"
+              className="w-44 rounded-lg border border-charcoal-500 bg-charcoal-700 py-2 pl-9 pr-3 text-sm text-white placeholder-charcoal-300 outline-none transition-all duration-300 focus:border-accent-blue/60 focus:shadow-glow-blue sm:w-56"
+            />
+          </div>
         </div>
       </div>
 
@@ -166,48 +300,24 @@ export default function Leaderboard({ boards }: { boards: BoardsData }) {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-charcoal-500/60 bg-charcoal-900/50">
-                {(
-                  [
-                    ["rank", "Rank"],
-                    [null, "Runner"],
-                    ["elo", "Elo"],
-                    ["phase", "Phase Pts"],
-                  ] as [EloSort | null, string][]
-                ).map(([key, label]) => (
-                  <Th key={label}>
-                    {key ? (
-                      <button
-                        onClick={() => handleEloSort(key)}
-                        className={`inline-flex items-center gap-1 uppercase transition-colors duration-300 ${
-                          eloSort === key ? "text-accent-blue" : "hover:text-white"
-                        }`}
-                      >
-                        {label}
-                        <span className={`text-[9px] ${eloSort === key ? "" : "opacity-0"}`}>
-                          {sortDir === 1 ? "▲" : "▼"}
-                        </span>
-                      </button>
-                    ) : (
-                      label
-                    )}
-                  </Th>
-                ))}
-                <Th>Tier</Th>
+                <SortableTh col="rank" label="#" className="w-16" />
+                <PlainTh label="Runner" />
+                <SortableTh col="elo" label="Elo" />
+                <SortableTh col="phase" label="Phase Points" />
+                <PlainTh label="Rank" />
               </tr>
             </thead>
             <tbody>
               {eloRows.map((e) => (
-                <tr key={e.uuid} className="border-b border-charcoal-600/40 transition-all duration-300 hover:bg-accent-teal/10">
+                <tr key={e.uuid} className={rowClass} onClick={() => openProfile(e.name)}>
                   <RankCell rank={e.rank} />
                   <td className="px-4 py-3">
                     <RunnerCell name={e.name} country={e.country} elo={e.elo} />
                   </td>
                   <td className="px-4 py-3 font-mono text-sm font-bold text-white">{e.elo}</td>
                   <td className="px-4 py-3 font-mono text-sm text-charcoal-300">{e.phasePoint}</td>
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs" style={{ color: undefined }}>
-                      {tierForElo(e.elo)}
-                    </span>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold" style={{ color: TIER_COLORS[tierForElo(e.elo)] }}>
+                    {tierForElo(e.elo)}
                   </td>
                 </tr>
               ))}
@@ -221,17 +331,17 @@ export default function Leaderboard({ boards }: { boards: BoardsData }) {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-charcoal-500/60 bg-charcoal-900/50">
-                <Th className="w-20">Rank</Th>
-                <Th>Runner</Th>
-                <Th>Time</Th>
-                <Th>Overworld</Th>
-                <Th>Bastion</Th>
-                <Th>Date</Th>
+                <SortableTh col="rank" label="#" className="w-16" />
+                <PlainTh label="Runner" />
+                <SortableTh col="time" label="Time" />
+                <PlainTh label="Overworld" />
+                <PlainTh label="Bastion" />
+                <SortableTh col="date" label="Date" />
               </tr>
             </thead>
             <tbody>
               {timeRows.map((e) => (
-                <tr key={`${e.rank}-${e.uuid}`} className="border-b border-charcoal-600/40 transition-all duration-300 hover:bg-accent-teal/10">
+                <tr key={`${e.rank}-${e.uuid}`} className={rowClass} onClick={() => openProfile(e.name)}>
                   <RankCell rank={e.rank} />
                   <td className="px-4 py-3">
                     <RunnerCell name={e.name} country={e.country} elo={e.elo} />
@@ -256,15 +366,15 @@ export default function Leaderboard({ boards }: { boards: BoardsData }) {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-charcoal-500/60 bg-charcoal-900/50">
-                <Th className="w-20">Rank</Th>
-                <Th>Runner</Th>
-                <Th>Time</Th>
-                <Th>Elo</Th>
+                <SortableTh col="rank" label="#" className="w-16" />
+                <PlainTh label="Runner" />
+                <SortableTh col="time" label="Time" />
+                <SortableTh col="elo" label="Elo" />
               </tr>
             </thead>
             <tbody>
               {weeklyRows.map((e) => (
-                <tr key={`${e.rank}-${e.uuid}`} className="border-b border-charcoal-600/40 transition-all duration-300 hover:bg-accent-teal/10">
+                <tr key={`${e.rank}-${e.uuid}`} className={rowClass} onClick={() => openProfile(e.name)}>
                   <RankCell rank={e.rank} />
                   <td className="px-4 py-3">
                     <RunnerCell name={e.name} country={e.country} elo={e.elo} />
