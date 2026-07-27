@@ -120,6 +120,32 @@ export function rankTotalMs(tier: Tier): number {
 }
 
 /**
+ * Difficulty correction (ms) applied to an Overworld split before ranking it.
+ *
+ * The per-rank averages are pooled across every seed type, but the types are
+ * not equally fast — a village start costs time a ruined portal doesn't. Left
+ * uncorrected, a ruined portal flatters the runner and a village punishes them.
+ * Positive = the type is inherently fast, so the time is penalised; negative =
+ * inherently slow, so the time is credited.
+ */
+export const OVERWORLD_PACE_ADJUST: Record<string, number> = {
+  VILLAGE: -15_000,
+  DESERT_TEMPLE: 0,
+  SHIPWRECK: 0,
+  BURIED_TREASURE: 10_000,
+  RUINED_PORTAL: 50_000,
+};
+
+/** The correction for a seed type, or 0 when it needs none. */
+export function paceAdjustFor(
+  field: "overworld" | "bastion",
+  seedType: string | null,
+): number {
+  if (field !== "overworld" || !seedType) return 0;
+  return OVERWORLD_PACE_ADJUST[seedType] ?? 0;
+}
+
+/**
  * The rank a single phase time reads as: the tier whose average for THAT
  * phase is closest to `ms`. A player can be Iron overall yet post a
  * Gold-level bastion split — this surfaces that per-split.

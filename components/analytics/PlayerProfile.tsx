@@ -7,6 +7,7 @@ import { formatSegment, formatSigned, formatTime, winRate } from "@/lib/format";
 import {
   deservedTier,
   flagEmoji,
+  paceAdjustFor,
   prettyEnum,
   RANK_SPLITS,
   rankTotalMs,
@@ -87,14 +88,28 @@ function PlayerSearch({
  * Shows which rank a single split time reads as. A runner sitting in Iron
  * overall can still post a Gold-level bastion split — this labels that.
  */
-function SplitRankChip({ phase, ms }: { phase: SplitKey; ms: number }) {
-  const tier = tierForSplit(phase, ms);
+function SplitRankChip({
+  phase,
+  ms,
+  /** Seed-difficulty correction (ms) folded in before ranking. */
+  adjustMs = 0,
+}: {
+  phase: SplitKey;
+  ms: number;
+  adjustMs?: number;
+}) {
+  const rankMs = ms + adjustMs;
+  const tier = tierForSplit(phase, rankMs);
   const c = TIER_COLORS[tier];
+  const sign = adjustMs > 0 ? "+" : "−";
+  const title = adjustMs
+    ? `${formatSegment(ms)} on this seed type counts as ${formatSegment(rankMs)} once adjusted ${sign}${Math.abs(adjustMs) / 1000}s for its difficulty — ${tier}-level pace (${tier} average ${formatSegment(RANK_SPLITS[tier][phase])})`
+    : `${formatSegment(ms)} reads as ${tier}-level pace for ${SPLIT_META[phase].label} (${tier} average ${formatSegment(RANK_SPLITS[tier][phase])})`;
   return (
     <span
       className="chip border"
       style={{ color: c, borderColor: `${c}55`, backgroundColor: `${c}14` }}
-      title={`${formatSegment(ms)} reads as ${tier}-level pace for ${SPLIT_META[phase].label} (${tier} average ${formatSegment(RANK_SPLITS[tier][phase])})`}
+      title={title}
     >
       {tier}
     </span>
@@ -733,6 +748,7 @@ function SeedTable({
   splitAvg,
   splitPhase,
   deathStats,
+  field,
 }: {
   buckets: SeedBucket[];
   /** Header label for the seed-specific split column. */
@@ -741,6 +757,8 @@ function SeedTable({
   splitAvg: Map<string, { avgMs: number; n: number }>;
   /** Which phase that column measures — drives the rank badge. */
   splitPhase: SplitKey;
+  /** Which grouping the table is showing — drives the seed-difficulty offset. */
+  field: "overworld" | "bastion";
   /** type key → death counts from the sampled runs. */
   deathStats: Record<string, { runs: number; withDeath: number; deaths: number }>;
 }) {
@@ -828,7 +846,11 @@ function SeedTable({
                           n{splitAvg.get(b.key)!.n}
                         </span>
                       </span>
-                      <SplitRankChip phase={splitPhase} ms={splitAvg.get(b.key)!.avgMs} />
+                      <SplitRankChip
+                        phase={splitPhase}
+                        ms={splitAvg.get(b.key)!.avgMs}
+                        adjustMs={paceAdjustFor(field, b.key)}
+                      />
                     </div>
                   ) : (
                     <span className="text-charcoal-300">—</span>
@@ -904,6 +926,12 @@ function SeedBreakdown({ profile }: { profile: ProfileData }) {
             </span>{" "}
             by seed sub-type across the last {profile.runs.length} matches
             <span className="text-charcoal-300"> (split from {profile.sampledRuns} sampled runs)</span>.
+            {tab === "overworld" && (
+              <span className="text-charcoal-300">
+                {" "}Rank chips are adjusted for how fast each seed type
+                inherently is, so they compare fairly.
+              </span>
+            )}
           </p>
         </div>
         <div className="flex rounded-lg bg-charcoal-700 p-1">
@@ -925,6 +953,7 @@ function SeedBreakdown({ profile }: { profile: ProfileData }) {
         splitCol={splitCol}
         splitAvg={splitAvg}
         splitPhase={splitPhase}
+        field={tab}
         deathStats={deathStats}
       />
     </div>
